@@ -7,9 +7,6 @@ setup(name='labjackcontroller',
       licence='MIT',
       install_requires=[
                         'typing',
-                        'numpy',
-                        'math',
-                        'time',
-                        'multiprocessing'
-                        ],
+                        'numpy'
+                       ],
       zip_safe=False)

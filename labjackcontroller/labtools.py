@@ -2,8 +2,9 @@ from labjack import ljm
 import numpy as np
 from typing import List
 from math import ceil
+from numba import jit
 import time
-from multiprocessing import RawArray, Value
+from multiprocessing import Array, Value
 
 
 class LabjackReader(object):
@@ -35,6 +36,7 @@ class LabjackReader(object):
         Returns
         -------
         None
+
         """
         # Also keep track of the input channels we're reading.
         self.input_channels = None
@@ -49,6 +51,7 @@ class LabjackReader(object):
 
         self.type, self.connection, self.id = type, connection, identifier
 
+    @jit(nogil=True)
     def get_max_data_index(self) -> int:
         """
         Return the largest index value that has been filled.
@@ -61,6 +64,7 @@ class LabjackReader(object):
         -------
         max_index: int
             The index of the latest value that has been recorded.
+
         """
         if self.max_index is not None and self.max_index.value:
             return self.max_index.value
@@ -81,9 +85,11 @@ class LabjackReader(object):
             'w' for writing
             'w+' for reading and writing, with file truncation
             'a' for append mode
+
         Returns
         -------
         None
+
         """
         if not len(self.data_arr):
             raise Exception("No data to write to file.")
@@ -107,6 +113,7 @@ class LabjackReader(object):
             for voltages in curr_queue:
                 f.write(" ".join([str(item) for item in voltages]) + '\n')
 
+    @jit(nogil=True)
     def get_data(self, from_index=0, to_index=-1) -> List[List[float]]:
         """
         Return data in latest array.
@@ -131,45 +138,19 @@ class LabjackReader(object):
         value of this function will be None.
         """
         if self.data_arr is not None:
-            return np.frombuffer(self.data_arr[0:-1], dtype=np.float32) \
-                    .reshape((ceil(len(self.data_arr) /
-                                   (len(self.input_channels) + 1)),
-                             len(self.input_channels) + 1))
+            if to_index == -1:
+                to_index = len(self.data_arr)
+            return np.array(self.data_arr[from_index:to_index]) \
+                .reshape((ceil((to_index - from_index) /
+                               (len(self.input_channels) + 1)),
+                         len(self.input_channels) + 1))
         # Else...
         return None
 
-        def _open_stream(self):
-            """
-            Internal method to open a streaming connection to the LabJack.
-
-            Parameters
-            ----------
-            None
-
-            Returns
-            -------
-            None
-            """
-            if not self.connection_open:
-                # Open our device.
-                try:
-                    self.handle = ljm.openS(self.type, self.connection,
-                                            self.id)
-                    self.connection_open = True
-                except ljm.LJMError as ljm_e:
-                    print("Failed to open LabJack device:", ljm_e)
-                    exit(1)
-
-                info = ljm.getHandleInfo(self.handle)
-                print("Opened a LabJack with Device type: %i,\n"
-                      "Connection type: %i, Serial number: %i,\n"
-                      "IP address: %s, Port: %i, Max bytes per MB: %i"
-                      % (info[0], info[1], info[2],
-                         ljm.numberToIP(info[3]), info[4], info[5]))
-
-    def _close_stream(self) -> None:
+    @jit(nogil=True)
+    def _open_stream(self):
         """
-        Internal method to close a streaming connection to the LabJack.
+        Open a streaming connection to the LabJack.
 
         Parameters
         ----------
@@ -178,18 +159,78 @@ class LabjackReader(object):
         Returns
         -------
         None
+
+        """
+        if not self.connection_open:
+            # Open our device.
+            self.handle = ljm.openS(self.type, self.connection,
+                                    self.id)
+            self.connection_open = True
+
+            info = ljm.getHandleInfo(self.handle)
+            print("Opened a LabJack with Device type: %i,\n"
+                  "Connection type: %i, Serial number: %i,\n"
+                  "IP address: %s, Port: %i, Max bytes per MB: %i"
+                  % (info[0], info[1], info[2],
+                     ljm.numberToIP(info[3]), info[4], info[5]))
+
+    @jit(nogil=True)
+    def _close_stream(self) -> None:
+        """
+        Close a streaming connection to the LabJack.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
         """
         if self.connection_open:
-            try:
-                # Try to close the stream
-                print("\nStop Stream")
-                ljm.eStreamStop(self.handle)
-                self.connection_open = False
-            except ljm.LJMError as ljm_e:
-                print("Labjack error closing the stream:", ljm_e)
-            except Exception as e:
-                print("Python error closing the stream:", e)
+            # Try to close the stream
+            print("\nStop Stream")
+            ljm.eStreamStop(self.handle)
+            self.connection_open = False
 
+    def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
+               scans_per_read, scan_rate):
+            # Declare the ports we want to read, EG. AIN0 & AIN1
+            num_addrs = len(inputs)
+            aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
+
+            # When streaming, negative channels and ranges can be configured
+            # for individual analog inputs, but the stream has only one
+            # settling time and resolution.
+
+            # Ensure triggered stream is disabled.
+            ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
+
+            # Enabling internally-clocked stream.
+            ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+
+            # All negative channels are single-ended, AIN0 and AIN1 ranges are
+            # +/-10 V, stream settling is 0 (default) and stream resolution
+            # index is 0 (default).
+            aNames = ["AIN_ALL_NEGATIVE_CH",
+                      *[element + "_RANGE" for element in inputs],
+                      "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
+            aValues = [ljm.constants.GND, *inputs_max_voltages,
+                       stream_setting, resolution]
+
+            # Write the analog inputs' negative channels (when applicable),
+            # ranges, stream settling time and stream resolution configuration.
+            numFrames = len(aNames)
+            print("Before Write")
+            ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
+            print("Completed write")
+
+            # Configure and start stream
+            return ljm.eStreamStart(self.handle, scans_per_read, num_addrs,
+                                    aScanList, scan_rate)
+
+    @jit(nogil=True)
     def collect_data(self,
                      inputs: List[str],
                      inputs_max_voltages: List[float],
@@ -240,127 +281,95 @@ class LabjackReader(object):
         >>> reader = LabjackReader("T7")
         >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 50000)
         None
+
         """
         # Open a connection.
         self._open_stream()
 
-        # Declare the ports we want to read, EG. AIN0 & AIN1
         num_addrs = len(inputs)
-        aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
+        scan_rate = self._setup(inputs, inputs_max_voltages, stream_setting,
+                                resolution, scans_per_read, scan_rate)
 
-        try:
-            # When streaming, negative channels and ranges can be configured
-            # for individual analog inputs, but the stream has only one
-            # settling time and resolution.
+        print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
-            # Ensure triggered stream is disabled.
-            ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
+        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
+        start = time.time()
+        totScans = 0
+        totSkip = 0  # Total skipped samples
 
-            # Enabling internally-clocked stream.
-            ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+        self.input_channels = inputs
 
-            # All negative channels are single-ended, AIN0 and AIN1 ranges are
-            # +/-10 V, stream settling is 0 (default) and stream resolution
-            # index is 0 (default).
-            aNames = ["AIN_ALL_NEGATIVE_CH",
-                      *[element + "_RANGE" for element in inputs],
-                      "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
-            aValues = [ljm.constants.GND, *inputs_max_voltages,
-                       stream_setting, resolution]
+        # Create a RawArray for multiple processes; this array
+        # stores our data.
+        size = int(seconds*scan_rate*(len(inputs) + 1))
+        self.data_arr = Array('d', size, lock=False)
 
-            # Write the analog inputs' negative channels (when applicable),
-            # ranges, stream settling time and stream resolution configuration.
-            numFrames = len(aNames)
-            print("Before Write")
-            ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
-            print("Completed write")
+        packet_num = 0
+        self.max_index = Value('l', 0)
+        step_size = len(inputs)
+        while time.time() - start < seconds:
+            print(time.time() - start)
+            # Read all rows of data off of the latest packet in the stream.
+            ret = ljm.eStreamRead(self.handle)
+            read_time = time.time() - start
 
-            # Configure and start stream
-            scanRate = ljm.eStreamStart(self.handle, scans_per_read, num_addrs,
-                                        aScanList, scan_rate)
-            print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
+            # We will manually calculate the times each entry occurs at.
+            # The stream itself is timed by the same clock that runs
+            # CORE_TIMER, and it is officially advised we use the stream
+            # clocking instead.
+            # See https://forums.labjack.com/index.php?showtopic=6992
+            expected_time = (scans_per_read/scan_rate)*packet_num
 
-            # Python 3.7 has time_ns, upgrade to this when Conda supports it.
-            start = time.time()
-            totScans = 0
-            totSkip = 0  # Total skipped samples
+            # The delta between the expected time and the arrival time is
+            # the error + travel time
+            travel_time = read_time - expected_time
 
-            self.input_channels = inputs
+            # Calculate times that the data occurred at. See the CORE_TIMER
+            # comment.
+            for i in range(0, len(ret[0]) - 1, step_size):
+                curr_time = scans_per_read / scan_rate\
+                            * (packet_num + i / scans_per_read)
+                if self.max_index.value >= size - step_size:
+                    break
 
-            # Create a RawArray for multiple processes; this array
-            # stores our data.
-            size = int(seconds*scan_rate*(len(inputs) + 1))
-            self.data_arr = RawArray('d', size)
-
-            packet_num = 0
-            self.max_index = Value('l', 0)
-            step_size = len(inputs)
-            while time.time() - start < seconds:
-                # Read all rows of data off of the latest packet in the stream.
-                ret = ljm.eStreamRead(self.handle)
-                read_time = time.time() - start
-
-                # We will manually calculate the times each entry occurs at.
-                # The stream itself is timed by the same clock that runs
-                # CORE_TIMER, and it is officially advised we use the stream
-                # clocking instead.
-                # See https://forums.labjack.com/index.php?showtopic=6992
-                expected_time = (scans_per_read/scan_rate)*packet_num
-
-                # The delta between the expected time and the arrival time is
-                # the error + travel time
-                travel_time = read_time - expected_time
-
-                # Calculate times that the data occurred at. See the CORE_TIMER
-                # comment.
-                for i in range(0, len(ret[0]) - 1, step_size):
-                    curr_time = scans_per_read / scan_rate\
-                                * (packet_num + i / scans_per_read)
-                    if self.max_index.value >= size - step_size:
-                        break
-
-                    # We get a giant 1D list back, so work with what we have.
-                    for datapoint in ret[0][i:i + step_size]:
-                        self.data_arr[self.max_index.value] = datapoint
-                        self.max_index.value += 1
-
-                    # Put in the time as well
-                    self.data_arr[self.max_index.value] = curr_time
+                # We get a giant 1D list back, so work with what we have.
+                for datapoint in ret[0][i:i + step_size]:
+                    self.data_arr[self.max_index.value] = datapoint
                     self.max_index.value += 1
 
-                packet_num += 1
-                aData = ret[0]
-                scans = len(aData) / num_addrs
-                totScans += scans
+                # Put in the time as well
+                self.data_arr[self.max_index.value] = curr_time
+                self.max_index.value += 1
 
-                # Count the skipped samples which are indicated by -9999 values
-                # Missed samples occur after a device's stream buffer overflows
-                # and are reported after auto-recover mode ends.
-                curSkip = aData.count(-9999.0)
-                totSkip += curSkip
+            packet_num += 1
+            aData = ret[0]
+            scans = len(aData) / num_addrs
+            totScans += scans
 
-                ainStr = ""
-                for j in range(0, num_addrs):
-                    ainStr += "%s = %0.5f, " % (inputs[j], aData[j])
-                if curSkip:
-                    print("Scans Skipped = %0.0f" % (curSkip/num_addrs))
+            # Count the skipped samples which are indicated by -9999 values
+            # Missed samples occur after a device's stream buffer overflows
+            # and are reported after auto-recover mode ends.
+            curSkip = aData.count(-9999.0)
+            totSkip += curSkip
 
-            # We are done, record the actual ending time.
-            end = time.time()
+            ainStr = ""
+            for j in range(0, num_addrs):
+                ainStr += "%s = %0.5f, " % (inputs[j], aData[j])
+            if curSkip:
+                print("Scans Skipped = %0.0f" % (curSkip/num_addrs))
 
-            tt = end - start
-            print("\nTotal scans = %i\
-                  \nTime taken = %f seconds\
-                  \nLJM Scan Rate = %f scans/second\
-                  \nTimed Scan Rate = %f scans/second\
-                  \nTimed Sample Rate = %f samples/second\
-                  \nSkipped scans = %0.0f"
-                  % (totScans, tt, scanRate, (totScans / tt),
-                     (totScans * num_addrs / tt), (totSkip / num_addrs)))
-        except ljm.LJMError as ljm_e:
-            print("Labjack error collecting data:", ljm_e)
-        except Exception as e:
-            print("Python error collecting data:", e)
+        # We are done, record the actual ending time.
+        end = time.time()
+
+        tt = end - start
+        print("\nTotal scans = %i\
+              \nTime taken = %f seconds\
+              \nLJM Scan Rate = %f scans/second\
+              \nTimed Scan Rate = %f scans/second\
+              \nTimed Sample Rate = %f samples/second\
+              \nSkipped scans = %0.0f"
+              % (totScans, tt, scan_rate, (totScans / tt),
+                 (totScans * num_addrs / tt), (totSkip / num_addrs)))
 
         # Close the connection.
         self._close_stream()
