@@ -2,7 +2,6 @@ from labjack import ljm
 import numpy as np
 from typing import List
 from math import ceil
-from numba import jit
 import time
 from multiprocessing import Array, Value
 
@@ -11,7 +10,7 @@ class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
     def __init__(self,
-                 type: str,
+                 device_type: str,
                  connection="ANY",
                  identifier="ANY") -> None:
         """
@@ -38,6 +37,12 @@ class LabjackReader(object):
         None
 
         """
+        # Handle if we were given bad args to initialize on.
+        if not (isinstance(device_type, str)
+                and isinstance(connection, str)
+                and isinstance(identifier, str)):
+            raise Exception("Invalid initialization parameters provided")
+        
         # Also keep track of the input channels we're reading.
         self.input_channels = None
 
@@ -49,9 +54,8 @@ class LabjackReader(object):
 
         self.connection_open = False
 
-        self.type, self.connection, self.id = type, connection, identifier
+        self.type, self.connection, self.id = device_type, connection, identifier
 
-    @jit(nogil=True)
     def get_max_data_index(self) -> int:
         """
         Return the largest index value that has been filled.
@@ -91,7 +95,7 @@ class LabjackReader(object):
         None
 
         """
-        if not len(self.data_arr):
+        if self.data_arr is None or not len(self.data_arr):
             raise Exception("No data to write to file.")
         if mode not in ['r+', 'w', 'w+', 'a']:
             raise Exception("Invalid file write mode specified.")
@@ -113,7 +117,6 @@ class LabjackReader(object):
             for voltages in curr_queue:
                 f.write(" ".join([str(item) for item in voltages]) + '\n')
 
-    @jit(nogil=True)
     def get_data(self, from_index=0, to_index=-1) -> List[List[float]]:
         """
         Return data in latest array.
@@ -147,7 +150,6 @@ class LabjackReader(object):
         # Else...
         return None
 
-    @jit(nogil=True)
     def _open_stream(self):
         """
         Open a streaming connection to the LabJack.
@@ -174,7 +176,6 @@ class LabjackReader(object):
                   % (info[0], info[1], info[2],
                      ljm.numberToIP(info[3]), info[4], info[5]))
 
-    @jit(nogil=True)
     def _close_stream(self) -> None:
         """
         Close a streaming connection to the LabJack.
@@ -230,7 +231,6 @@ class LabjackReader(object):
             return ljm.eStreamStart(self.handle, scans_per_read, num_addrs,
                                     aScanList, scan_rate)
 
-    @jit(nogil=True)
     def collect_data(self,
                      inputs: List[str],
                      inputs_max_voltages: List[float],
@@ -287,8 +287,10 @@ class LabjackReader(object):
         self._open_stream()
 
         num_addrs = len(inputs)
-        scan_rate = self._setup(inputs, inputs_max_voltages, stream_setting,
-                                resolution, scans_per_read, scan_rate)
+
+        scan_rate = self._setup(inputs, inputs_max_voltages,
+                                stream_setting, resolution,
+                                scans_per_read, scan_rate)
 
         print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
@@ -308,7 +310,6 @@ class LabjackReader(object):
         self.max_index = Value('l', 0)
         step_size = len(inputs)
         while time.time() - start < seconds:
-            print(time.time() - start)
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
             read_time = time.time() - start
