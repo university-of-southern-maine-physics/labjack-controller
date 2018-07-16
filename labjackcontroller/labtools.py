@@ -3,7 +3,9 @@ import numpy as np
 from typing import List
 from math import ceil
 import time
-from multiprocessing import Array, Value
+from multiprocessing import Array
+
+np.set_printoptions(threshold=np.nan)
 
 
 class LabjackReader(object):
@@ -42,27 +44,46 @@ class LabjackReader(object):
                 and isinstance(connection, str)
                 and isinstance(identifier, str)):
             raise Exception("Invalid initialization parameters provided")
-        
-        # Also keep track of the input channels we're reading.
-        self.input_channels = None
+
+        self.type, self.connection = device_type, connection
+        self.id = identifier
+
+        self.base_init()
+
+    @classmethod
+    def base_init(cls) -> None:
+        """
+        Create an uninitialized object that we can init later.
+
+        Returns
+        -------
+        None
+
+        """
+        # Keep track of the input channels we're reading.
+        cls.input_channels = None
 
         # Declare a data storage handle
-        self.data_arr = None
+        cls.data_arr = None
 
         # Also, specify the largest index that is populated.
-        self.max_index = None
+        cls.max_index = None
 
-        self.connection_open = False
+        cls.connection_open = False
+    
+    def get_connection_status(self):
+        return self.connection_open
 
-        self.type, self.connection, self.id = device_type, connection, identifier
-
-    def get_max_data_index(self) -> int:
+    def get_max_data_index(self, safe=True) -> int:
         """
         Return the largest index value that has been filled.
 
         Parameters
         ----------
-        None
+        safe : bool, optional
+            If True, will return the last multiple of the number of
+            input channels + time. This is used to safely index
+            an under-construction data array and get data points easily.
 
         Returns
         -------
@@ -70,12 +91,19 @@ class LabjackReader(object):
             The index of the latest value that has been recorded.
 
         """
-        if self.max_index is not None and self.max_index.value:
-            return self.max_index.value
+        if self.max_index is not None and self.max_index:
+            if safe:
+                tmp_max = self.max_index
+                return tmp_max - (tmp_max % (len(self.input_channels) + 1))
+            # Else...
+            return self.max_index
         else:
             return -1
 
-    def write_data_to_file(self, filename: str, mode='w') -> None:
+    def write_data_to_file(self, filename: str,
+                           row_start: int, row_end: int,
+                           mode='w',
+                           header=False) -> int:
         """
         Write a queue of datapoints to a file named filename.
 
@@ -83,52 +111,75 @@ class LabjackReader(object):
         ----------
         filename : str
             A filename, such as "xyz.txt", that specifies this file.
+        row_start : The datapoint across all channels to start from.
+                    0 is the very first one ever recorded.
+        row_end : The last datapoint to include (eg. 10th).
+                  If a value greater than the number of rows present
+                  is given, only the rows present will be backed up
+                  and no error will be thrown.
         mode : {'r+', 'w', 'w+', or 'a'}, optional
             Valid options are
             'r+' for reading and writing, without file truncation
             'w' for writing
             'w+' for reading and writing, with file truncation
             'a' for append mode
+        header : A column header for each of the channels being read
 
         Returns
         -------
-        None
+        num_rows : the number of rows actually written
 
         """
-        if self.data_arr is None or not len(self.data_arr):
-            raise Exception("No data to write to file.")
+        if self.input_channels is None:
+            return -1
         if mode not in ['r+', 'w', 'w+', 'a']:
             raise Exception("Invalid file write mode specified.")
         if not isinstance(filename, str) or not len(filename):
             raise Exception("Bad filename given.")
 
         with open(filename, mode) as f:
+            # Write header.
+            if header:
+                f.write(" ".join(self.input_channels) + ' time\n')
+
+            if self.data_arr is None or not len(self.data_arr):
+                return 0
+
             # Reshape the data into rows, where every row is a moment in time
             # where all channels were sampled at once.
-            curr_queue = np.array(self.data_arr) \
-                            .reshape((ceil(len(self.data_arr)
-                                           / (len(self.input_channels) + 1)),
-                                     len(self.input_channels) + 1))
+            curr_queue = self._reshape_data(row_start, row_end)
+            
+            if curr_queue is not None:
+                # Write data.
+                for signal in curr_queue:
+                    f.write(" ".join([str(item) for item in signal]) + '\n')
+                return len(curr_queue)
+            return 0
+    
+    def _reshape_data(self, from_row, to_row):
+        if (self.data_arr is not None and self.get_max_data_index() != -1
+           and from_row >= 0):
+            row_width = len(self.input_channels) + 1
+            max_index = min(self.get_max_data_index(), row_width*to_row)
 
-            # Write header.
-            f.write(" ".join(self.input_channels) + ' time\n')
+            start_index = from_row*row_width
 
-            # Write data.
-            for voltages in curr_queue:
-                f.write(" ".join([str(item) for item in voltages]) + '\n')
+            return np.array(self.data_arr[start_index:max_index]) \
+                .reshape((ceil((max_index - start_index) / row_width),
+                         row_width))
+        # Else...
+        return None
 
-    def get_data(self, from_index=0, to_index=-1) -> List[List[float]]:
+
+    def get_data(self, num_rows) -> List[List[float]]:
         """
         Return data in latest array.
 
         Parameters
         ----------
-        from_index : int, optional
-            Starting index in recorded data array. Does not check if the index
-            provided is valid.
-        to_index : int, optional
-            Ending index in recorded data array. Does not check if the index
-            provided is valid.
+        num_rows : int, optional
+            The number of rows to return. Number is relative to the end,
+            or -1 for all rows.
 
         Returns
         -------
@@ -140,15 +191,20 @@ class LabjackReader(object):
         If the internal data array has not been initialized yet, the return
         value of this function will be None.
         """
-        if self.data_arr is not None:
-            if to_index == -1:
-                to_index = len(self.data_arr)
-            return np.array(self.data_arr[from_index:to_index]) \
-                .reshape((ceil((to_index - from_index) /
-                               (len(self.input_channels) + 1)),
-                         len(self.input_channels) + 1))
-        # Else...
-        return None
+        max_row = self.get_max_data_index()
+        if max_row < 0:
+            return None
+
+        row_width = len(self.input_channels) + 1
+        max_row = int(max_row / row_width)
+
+
+        if num_rows < -1:
+            raise Exception("Invalid number of rows provided")
+        elif num_rows == -1:
+            return self._reshape_data(0, max_row)
+        else:
+            return self._reshape_data(max_row - num_rows, max_row)
 
     def _open_stream(self):
         """
@@ -196,10 +252,22 @@ class LabjackReader(object):
             self.connection_open = False
 
     def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
-               scans_per_read, scan_rate):
-            # Declare the ports we want to read, EG. AIN0 & AIN1
+               scan_rate, sample_rate=-1):
+            # Sanity check on inputs
             num_addrs = len(inputs)
+
+            max_sample_rate = scan_rate * num_addrs
+            if sample_rate == -1:
+                sample_rate = max_sample_rate
+            elif sample_rate > max_sample_rate:
+                print("Sample rate is too high. Setting to max value.")
+                sample_rate = max_sample_rate
+
+            # Declare the ports we want to read, EG. AIN0 & AIN1
             aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
+
+            # If a packet is lost, configure the device to try and get it again.
+            ljm.writeLibraryConfigS("LJM_RETRY_ON_TRANSACTION_ID_MISMATCH", 1)
 
             # When streaming, negative channels and ranges can be configured
             # for individual analog inputs, but the stream has only one
@@ -228,15 +296,15 @@ class LabjackReader(object):
             print("Completed write")
 
             # Configure and start stream
-            return ljm.eStreamStart(self.handle, scans_per_read, num_addrs,
-                                    aScanList, scan_rate)
+            return ljm.eStreamStart(self.handle, sample_rate, num_addrs,
+                                    aScanList, scan_rate), sample_rate
 
     def collect_data(self,
                      inputs: List[str],
                      inputs_max_voltages: List[float],
                      seconds: float,
                      scan_rate: int,
-                     scans_per_read=1,
+                     sample_rate=-1,
                      stream_setting=0,
                      resolution=8) -> None:
         """
@@ -260,9 +328,9 @@ class LabjackReader(object):
         scan_rate: int
             Number of times per second (Hz) the device will get a datapoint for
             each of the channels specified.
-        scans_per_read: int, optional
+        sample_rate: int, optional
             Number of data points contained in a packet sent by the LabJack
-            device.
+            device. -1 indicates the maximum possible sample rate.
         stream_setting: int, optional
             See official LabJack documentation.
         resolution: int, optional
@@ -283,14 +351,19 @@ class LabjackReader(object):
         None
 
         """
+        # Close the stream if it was already open; this is done
+        # to prevent unexpected termination from last time messing
+        # up the connection this time.
+        self._close_stream()
+
         # Open a connection.
         self._open_stream()
 
         num_addrs = len(inputs)
 
-        scan_rate = self._setup(inputs, inputs_max_voltages,
+        scan_rate, sample_rate = self._setup(inputs, inputs_max_voltages,
                                 stream_setting, resolution,
-                                scans_per_read, scan_rate)
+                                scan_rate, sample_rate=sample_rate)
 
         print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
@@ -307,11 +380,12 @@ class LabjackReader(object):
         self.data_arr = Array('d', size, lock=False)
 
         packet_num = 0
-        self.max_index = Value('l', 0)
+        self.max_index = 0
         step_size = len(inputs)
         while time.time() - start < seconds:
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
+            print(ret[1:])
             read_time = time.time() - start
 
             # We will manually calculate the times each entry occurs at.
@@ -319,7 +393,7 @@ class LabjackReader(object):
             # CORE_TIMER, and it is officially advised we use the stream
             # clocking instead.
             # See https://forums.labjack.com/index.php?showtopic=6992
-            expected_time = (scans_per_read/scan_rate)*packet_num
+            expected_time = (sample_rate/scan_rate)*packet_num
 
             # The delta between the expected time and the arrival time is
             # the error + travel time
@@ -328,19 +402,19 @@ class LabjackReader(object):
             # Calculate times that the data occurred at. See the CORE_TIMER
             # comment.
             for i in range(0, len(ret[0]) - 1, step_size):
-                curr_time = scans_per_read / scan_rate\
-                            * (packet_num + i / scans_per_read)
-                if self.max_index.value >= size - step_size:
+                curr_time = sample_rate / scan_rate\
+                            * (packet_num + i / sample_rate)
+                if self.max_index >= size - step_size:
                     break
 
                 # We get a giant 1D list back, so work with what we have.
                 for datapoint in ret[0][i:i + step_size]:
-                    self.data_arr[self.max_index.value] = datapoint
-                    self.max_index.value += 1
+                    self.data_arr[self.max_index] = datapoint
+                    self.max_index += 1
 
                 # Put in the time as well
-                self.data_arr[self.max_index.value] = curr_time
-                self.max_index.value += 1
+                self.data_arr[self.max_index] = curr_time
+                self.max_index += 1
 
             packet_num += 1
             aData = ret[0]
