@@ -28,8 +28,6 @@ class TKWindow:
     def __init__(self, width=1366, height=768) -> None:
         self.im_width = width
         self.im_height = height
-        self.dpi = 100
-        inches_x, inches_y = self.im_width / self.dpi, self.im_height / self.dpi
 
         # Declare the existence/init values of the class vars we'll use
         self.master = Tk()
@@ -38,20 +36,17 @@ class TKWindow:
         self.filename = StringVar()
         self.connection_type = StringVar()
         self.device_type = StringVar()
-        self.labjack = None
 
         # Checkbox IntVars for four channels
-        self.ain_0, self.ain_1, self.ain_2, self.ain_3 = IntVar(), IntVar(),\
-                                                         IntVar(), IntVar()
+        self.ain_0, self.ain_1 = IntVar(), IntVar()
+        self.ain_2, self.ain_3 = IntVar(), IntVar()
+
         # Set three of them to be checked.
         self.ain_0.set(1)
         self.ain_1.set(1)
         self.ain_2.set(1)
 
         self.channels = []
-
-        # Declare a figure and two subplots.
-        self.fig = plt.Figure(figsize=(inches_x, inches_y))
 
         # Set default values.
         self.connection_type.set("ETHERNET")
@@ -67,6 +62,7 @@ class TKWindow:
         # Slider for frequency of data sampling
         self.freq_slider = Scale(self.inter_container, from_=2, to=50000,
                                  label="Frequency (Hz)", length=0.95*width,
+                                 resolution=10,
                                  orient=HORIZONTAL)
         self.freq_slider.set(30000)
         self.freq_slider.pack(side=LEFT)
@@ -179,10 +175,12 @@ class TKWindow:
                             kwargs={'resolution': 0})
 
         # Declare a graphing process
-        graph_proc = Process(target=plotting_func, args=(my_lj, duration, frequency))
+        graph_proc = Process(target=plotting_func, args=(my_lj, duration,
+                                                         frequency))
 
         # Declare a data backup process
-        backup_proc = Process(target=backup, args=(my_lj, filename, duration))
+        backup_proc = Process(target=backup, args=(my_lj, frequency, filename,
+                                                   duration))
 
         # Start all threads, and join when finished.
         data_proc.start()
@@ -197,7 +195,7 @@ class TKWindow:
         """ Updates GUI elements to always have valid values."""
 
         channel_sum = self.ain_0.get() + self.ain_1.get() \
-                      + self.ain_2.get() + self.ain_3.get()
+            + self.ain_2.get() + self.ain_3.get()
         if not channel_sum:
             self.freq_slider.config(to=0)
         elif channel_sum == 1:
@@ -213,7 +211,8 @@ class TKWindow:
         self.master.after(1, self.update_gui)
 
 
-def backup(labjack: LabjackReader, filename: str, num_seconds: int) -> None:
+def backup(labjack: LabjackReader, backup_amt: int,
+           filename: str, num_seconds: int) -> None:
     """
     Backup data realtime.
 
@@ -222,6 +221,8 @@ def backup(labjack: LabjackReader, filename: str, num_seconds: int) -> None:
     labjack: LabjackReader
         A LabjackReader that is collecting data at the
         time of this function's call.
+    backup_amt: int
+        Number of rows to back up every attempt
     filename: str
         The name of the file to write to.
         If it does not exist yet, it will be created.
@@ -233,26 +234,29 @@ def backup(labjack: LabjackReader, filename: str, num_seconds: int) -> None:
     Returns
     -------
     None
+
     """
     start_pos = 0
-    increment = 1000
     start_time = time.time()
-    time.sleep(1)
-    # Write header only
+
+    # Write header only. The labjack may not be initialized yet, so keep
+    # trying until it works.
     while labjack.write_data_to_file(filename, 0, 0, mode='w', header=True) < 0:
         continue
 
     # Write data until time is up.
     while time.time() - start_time <= num_seconds:
-        print("Backup at", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
-        start_pos += labjack.write_data_to_file(filename,
-                                                start_pos,
-                                                start_pos + increment,
-                                                mode='a')
+        if labjack.get_max_row() > start_pos:
+            print("Backup at", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+            start_pos += labjack.write_data_to_file(filename,
+                                                    start_pos,
+                                                    start_pos + backup_amt,
+                                                    mode='a')
     print("Saving from rows", start_pos, "to", labjack.get_max_row())
+
     # Save the rest
     labjack.write_data_to_file(filename, start_pos,
-                               labjack.get_max_row(),
+                               labjack.get_max_row() + 1,
                                mode='a')
 
 

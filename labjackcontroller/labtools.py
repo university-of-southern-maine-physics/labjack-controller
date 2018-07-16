@@ -3,7 +3,8 @@ import numpy as np
 from typing import List, Tuple
 from math import ceil
 import time
-from multiprocessing import Array
+from multiprocessing import RawArray
+
 
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
@@ -67,7 +68,7 @@ class LabjackReader(object):
         cls.max_index = None
 
         cls.connection_open = False
-    
+
     def get_connection_status(self):
         """
         Get the status of the connection to the LabJack
@@ -84,7 +85,7 @@ class LabjackReader(object):
 
         """
         return self.connection_open
-    
+
     def get_max_row(self) -> int:
         """
         Return the number of the last row that currently exists.
@@ -176,14 +177,14 @@ class LabjackReader(object):
             # Reshape the data into rows, where every row is a moment in time
             # where all channels were sampled at once.
             curr_queue = self._reshape_data(row_start, row_end)
-            
+
             if curr_queue is not None:
                 # Write data.
                 for signal in curr_queue:
                     f.write(" ".join([str(item) for item in signal]) + '\n')
                 return len(curr_queue)
             return 0
-    
+
     def _reshape_data(self, from_row: int, to_row: int):
         """
         Get a range of rows from the recorded data
@@ -194,7 +195,7 @@ class LabjackReader(object):
             The first row to include, inclusive.
         to_row: int
             The last row to include, non-inclusive.
-        
+
         Returns
         -------
         array_like: ndarray
@@ -213,7 +214,6 @@ class LabjackReader(object):
                          row_width))
         # Else...
         return None
-
 
     def get_data(self, num_rows) -> List[List[float]]:
         """
@@ -241,7 +241,6 @@ class LabjackReader(object):
 
         row_width = len(self.input_channels) + 1
         max_row = int(max_row / row_width)
-
 
         if num_rows < -1:
             raise Exception("Invalid number of rows provided")
@@ -357,17 +356,15 @@ class LabjackReader(object):
         # +/-10 V, stream settling is 0 (default) and stream resolution
         # index is 0 (default).
         aNames = ["AIN_ALL_NEGATIVE_CH",
-                    *[element + "_RANGE" for element in inputs],
-                    "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
+                  *[element + "_RANGE" for element in inputs],
+                  "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
         aValues = [ljm.constants.GND, *inputs_max_voltages,
-                    stream_setting, resolution]
+                   stream_setting, resolution]
 
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
         numFrames = len(aNames)
-        print("Before Write")
         ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
-        print("Completed write")
 
         # Configure and start stream
         return ljm.eStreamStart(self.handle, sample_rate, num_addrs,
@@ -380,7 +377,8 @@ class LabjackReader(object):
                      scan_rate: int,
                      sample_rate=-1,
                      stream_setting=0,
-                     resolution=8) -> None:
+                     resolution=8,
+                     verbose=False) -> None:
         """
         Collect data from the LabJack device.
 
@@ -389,26 +387,28 @@ class LabjackReader(object):
 
         Parameters
         ----------
-        inputs: sequence of strings
+        inputs : sequence of strings
             Names of input channels on the LabJack device to read.
             Must correspond to the actual name on the device.
-        inputs_max_voltages: sequence of real values
+        inputs_max_voltages : sequence of real values
             Maximum voltages corresponding element-wise to the channels
             listed in inputs.
-        seconds: float
+        seconds : float
             Duration of the data run in seconds. The run will last at least as
             long as this value, and will try to stop streaming when this time
             has been met.
-        scan_rate: int
+        scan_rate : int
             Number of times per second (Hz) the device will get a datapoint for
             each of the channels specified.
-        sample_rate: int, optional
+        sample_rate : int, optional
             Number of data points contained in a packet sent by the LabJack
             device. -1 indicates the maximum possible sample rate.
-        stream_setting: int, optional
+        stream_setting : int, optional
             See official LabJack documentation.
         resolution: int, optional
             See official LabJack documentation.
+        verbose : str, optional
+            If enabled, will print out statistics about each read.
 
         Returns
         -------
@@ -436,8 +436,9 @@ class LabjackReader(object):
         num_addrs = len(inputs)
 
         scan_rate, sample_rate = self._setup(inputs, inputs_max_voltages,
-                                stream_setting, resolution,
-                                scan_rate, sample_rate=sample_rate)
+                                             stream_setting, resolution,
+                                             scan_rate,
+                                             sample_rate=sample_rate)
 
         print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
@@ -445,8 +446,8 @@ class LabjackReader(object):
 
         # Create a RawArray for multiple processes; this array
         # stores our data.
-        size = int(seconds*scan_rate*(len(inputs) + 1))
-        self.data_arr = Array('d', size, lock=False)
+        size = int(seconds * scan_rate * (len(inputs) + 1))
+        self.data_arr = RawArray('d', size)
 
         # Python 3.7 has time_ns, upgrade to this when Conda supports it.
         start = time.time()
@@ -459,7 +460,10 @@ class LabjackReader(object):
         while time.time() - start < seconds:
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
-            print(ret[1:])
+
+            if verbose:
+                print("There are %d scans left on the device buffer",
+                      "and %d scans left in the LJM's buffer", *ret[1:])
             read_time = time.time() - start
 
             # We will manually calculate the times each entry occurs at.
