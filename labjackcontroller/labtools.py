@@ -73,6 +73,11 @@ class LabjackReader(object):
     
     def get_connection_status(self):
         return self.connection_open
+    
+    def get_max_row(self) -> int:
+        if self.input_channels is None:
+            raise Exception("No channels have been declared")
+        return self.get_max_data_index()/(len(self.input_channels) + 1)
 
     def get_max_data_index(self, safe=True) -> int:
         """
@@ -367,17 +372,17 @@ class LabjackReader(object):
 
         print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
-        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
-        start = time.time()
-        totScans = 0
-        totSkip = 0  # Total skipped samples
-
         self.input_channels = inputs
 
         # Create a RawArray for multiple processes; this array
         # stores our data.
         size = int(seconds*scan_rate*(len(inputs) + 1))
         self.data_arr = Array('d', size, lock=False)
+
+        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
+        start = time.time()
+        totScans = 0
+        totSkip = 0  # Total skipped samples
 
         packet_num = 0
         self.max_index = 0

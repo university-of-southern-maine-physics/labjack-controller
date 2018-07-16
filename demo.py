@@ -212,6 +212,12 @@ def backup(labjack, filename, num_seconds):
                                                 start_pos,
                                                 start_pos + increment,
                                                 mode='a')
+    print("Saving from rows", start_pos, "to", labjack.get_max_row())
+    # Save the rest
+    labjack.write_data_to_file(filename, start_pos,
+                               labjack.get_max_row(),
+                               mode='a')
+    
 
 
 
