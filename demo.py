@@ -1,24 +1,34 @@
+"""
+Demonstrates the functionality of the LabjackReader.
+
+Creates a Tkinter GUI that prompts the user to set the frequency of data
+collection, the channels they will be sampling from, the duration of
+observing, and the filename to write this observed data to.
+
+After this input has been given, the GUI will close, and realtime data
+recording, backup, and graphing will begin.
+"""
 from labjackcontroller.labtools import LabjackReader
 from multiprocessing.managers import BaseManager
 from multiprocessing import Process
+
+from tkinter import Tk, Button, Scale, Frame, Entry, \
+                    OptionMenu, Checkbutton, HORIZONTAL, LEFT, RIGHT, END, \
+                    IntVar, StringVar
 
 import time
 
 import matplotlib
 matplotlib.use('TkAgg')
 
-import matplotlib.backends.backend_tkagg as backend_tkagg
 import matplotlib.pyplot as plt
 
-from tkinter import Tk, Label, Button, Canvas, Scale, Frame, Entry, \
-                    OptionMenu, Checkbutton, HORIZONTAL, LEFT, RIGHT, END, \
-                    IntVar, StringVar
 
 class TKWindow:
-    def __init__(self, width=1366, height=768):
+    def __init__(self, width=1366, height=768) -> None:
         self.im_width = width
         self.im_height = height
-        self.dpi = 100  #master.winfo_fpixels('1i')
+        self.dpi = 100
         inches_x, inches_y = self.im_width / self.dpi, self.im_height / self.dpi
 
         # Declare the existence/init values of the class vars we'll use
@@ -134,16 +144,25 @@ class TKWindow:
         # From now on, update the GUI to always have valid params.
         self.update_gui()
         self.master.mainloop()
-    
+
     def graph(self) -> None:
+        """ Closes GUI and starts LabJack with user's parameters """
+
         # Find out what channels were selected by the user.
-        self.channels = [label for value, label in
-                         zip([self.ain_0.get(), self.ain_1.get(),
-                              self.ain_2.get(), self.ain_3.get()],
-                             ["AIN0", "AIN1", "AIN2", "AIN3"]) if value]
+        channels = [label for value, label in
+                    zip([self.ain_0.get(), self.ain_1.get(),
+                         self.ain_2.get(), self.ain_3.get()],
+                        ["AIN0", "AIN1", "AIN2", "AIN3"]) if value]
+
+        # Get the other variables they specified.
         filename = self.filename.get()
         duration = self.duration.get()
         frequency = self.freq_slider.get()
+        device_type = self.device_type.get()
+        connection_type = self.connection_type.get()
+
+        # Close the GUI, as the mainloop in Tk is blocking.
+        self.master.destroy()
 
         # Register the LabjackReader so we can share it across processes.
         BaseManager.register('LabjackReader', LabjackReader)
@@ -151,17 +170,13 @@ class TKWindow:
         manager.start()
 
         # Instantiate a shared LabjackReader
-        my_lj = manager.LabjackReader(self.device_type.get(),
-                                      connection=self.connection_type.get())
+        my_lj = manager.LabjackReader(device_type, connection=connection_type)
 
         # Declare a data-gathering process
         data_proc = Process(target=my_lj.collect_data,
-                            args=(self.channels, [10.0]*len(self.channels),
-                                  duration, frequency),
+                            args=(channels, [10.0]*len(channels), duration,
+                                  frequency),
                             kwargs={'resolution': 0})
-
-        # Close the GUI, as the mainloop in Tk is blocking.
-        self.master.destroy()
 
         # Declare a graphing process
         graph_proc = Process(target=plotting_func, args=(my_lj, duration, frequency))
@@ -173,6 +188,7 @@ class TKWindow:
         data_proc.start()
         graph_proc.start()
         backup_proc.start()
+
         data_proc.join()
         graph_proc.join()
         backup_proc.join()
@@ -182,7 +198,7 @@ class TKWindow:
 
         channel_sum = self.ain_0.get() + self.ain_1.get() \
                       + self.ain_2.get() + self.ain_3.get()
-        if channel_sum == 0:
+        if not channel_sum:
             self.freq_slider.config(to=0)
         elif channel_sum == 1:
             self.freq_slider.config(to=105000)
@@ -196,7 +212,28 @@ class TKWindow:
         # Update in the next ms.
         self.master.after(1, self.update_gui)
 
-def backup(labjack, filename, num_seconds):
+
+def backup(labjack: LabjackReader, filename: str, num_seconds: int) -> None:
+    """
+    Backup data realtime.
+
+    Parameters
+    ----------
+    labjack: LabjackReader
+        A LabjackReader that is collecting data at the
+        time of this function's call.
+    filename: str
+        The name of the file to write to.
+        If it does not exist yet, it will be created.
+    num_seconds: int
+        The number of seconds to try realtime backup.
+        After this time, write any remaining data in
+        the labjack's buffer.
+
+    Returns
+    -------
+    None
+    """
     start_pos = 0
     increment = 1000
     start_time = time.time()
@@ -217,11 +254,10 @@ def backup(labjack, filename, num_seconds):
     labjack.write_data_to_file(filename, start_pos,
                                labjack.get_max_row(),
                                mode='a')
-    
 
 
-
-def plotting_func(labjack, num_seconds, sample_rate):
+def plotting_func(labjack: LabjackReader, num_seconds: int, sample_rate: int):
+    """ Plot data realtime """
     plt.figure(figsize=(16, 9))
     plt_handle = plt.gcf()
     plt_handle.subplots_adjust(bottom=0.2)
@@ -242,7 +278,5 @@ def plotting_func(labjack, num_seconds, sample_rate):
         plt_handle.canvas.draw()
 
 
-gui = TKWindow()
-
-# Write everything to file.
-#my_lj.write_data_to_file(filename)
+if __name__ == "__main__":
+    gui = TKWindow()

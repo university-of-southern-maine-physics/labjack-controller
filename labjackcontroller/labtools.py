@@ -1,12 +1,9 @@
 from labjack import ljm
 import numpy as np
-from typing import List
+from typing import List, Tuple
 from math import ceil
 import time
 from multiprocessing import Array
-
-np.set_printoptions(threshold=np.nan)
-
 
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
@@ -72,9 +69,35 @@ class LabjackReader(object):
         cls.connection_open = False
     
     def get_connection_status(self):
+        """
+        Get the status of the connection to the LabJack
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        connection_open: bool
+            True if the connection is open
+            False if the connection is closed/does not exist
+
+        """
         return self.connection_open
     
     def get_max_row(self) -> int:
+        """
+        Return the number of the last row that currently exists.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        row: int
+            The number of the last row recorded in the data array
+        """
         if self.input_channels is None:
             raise Exception("No channels have been declared")
         return self.get_max_data_index()/(len(self.input_channels) + 1)
@@ -161,7 +184,23 @@ class LabjackReader(object):
                 return len(curr_queue)
             return 0
     
-    def _reshape_data(self, from_row, to_row):
+    def _reshape_data(self, from_row: int, to_row: int):
+        """
+        Get a range of rows from the recorded data
+
+        Parameters
+        ----------
+        from_row: int
+            The first row to include, inclusive.
+        to_row: int
+            The last row to include, non-inclusive.
+        
+        Returns
+        -------
+        array_like: ndarray
+            A 2D array, starting at from_row, of datapoints, where
+            every row is one datapoint across all channels.
+        """
         if (self.data_arr is not None and self.get_max_data_index() != -1
            and from_row >= 0):
             row_width = len(self.input_channels) + 1
@@ -257,52 +296,82 @@ class LabjackReader(object):
             self.connection_open = False
 
     def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
-               scan_rate, sample_rate=-1):
-            # Sanity check on inputs
-            num_addrs = len(inputs)
+               scan_rate, sample_rate=-1) -> Tuple[int, int]:
+        """
+        Set up a connection to the LabJack for streaming
 
-            max_sample_rate = scan_rate * num_addrs
-            if sample_rate == -1:
-                sample_rate = max_sample_rate
-            elif sample_rate > max_sample_rate:
-                print("Sample rate is too high. Setting to max value.")
-                sample_rate = max_sample_rate
+        Parameters
+        ----------
+        inputs: sequence of strings
+            Names of input channels on the LabJack device to read.
+            Must correspond to the actual name on the device.
+        inputs_max_voltages: sequence of real values
+            Maximum voltages corresponding element-wise to the channels
+            listed in inputs.
+        stream_setting: int, optional
+            See official LabJack documentation.
+        resolution: int, optional
+            See official LabJack documentation.
+        scan_rate: int
+            Number of times per second (Hz) the device will get a datapoint for
+            each of the channels specified.
+        sample_rate: int, optional
+            Number of data points contained in a packet sent by the LabJack
+            device. -1 indicates the maximum possible sample rate.
 
-            # Declare the ports we want to read, EG. AIN0 & AIN1
-            aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
+        Returns
+        -------
+        scan_rate : int
+            The actual scan rate the device starts at
+        sample_rate : int
+            The actual sample rate the device starts at
 
-            # If a packet is lost, configure the device to try and get it again.
-            ljm.writeLibraryConfigS("LJM_RETRY_ON_TRANSACTION_ID_MISMATCH", 1)
+        """
+        # Sanity check on inputs
+        num_addrs = len(inputs)
 
-            # When streaming, negative channels and ranges can be configured
-            # for individual analog inputs, but the stream has only one
-            # settling time and resolution.
+        max_sample_rate = scan_rate * num_addrs
+        if sample_rate == -1:
+            sample_rate = max_sample_rate
+        elif sample_rate > max_sample_rate:
+            print("Sample rate is too high. Setting to max value.")
+            sample_rate = max_sample_rate
 
-            # Ensure triggered stream is disabled.
-            ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
+        # Declare the ports we want to read, EG. AIN0 & AIN1
+        aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
 
-            # Enabling internally-clocked stream.
-            ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+        # If a packet is lost, configure the device to try and get it again.
+        ljm.writeLibraryConfigS("LJM_RETRY_ON_TRANSACTION_ID_MISMATCH", 1)
 
-            # All negative channels are single-ended, AIN0 and AIN1 ranges are
-            # +/-10 V, stream settling is 0 (default) and stream resolution
-            # index is 0 (default).
-            aNames = ["AIN_ALL_NEGATIVE_CH",
-                      *[element + "_RANGE" for element in inputs],
-                      "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
-            aValues = [ljm.constants.GND, *inputs_max_voltages,
-                       stream_setting, resolution]
+        # When streaming, negative channels and ranges can be configured
+        # for individual analog inputs, but the stream has only one
+        # settling time and resolution.
 
-            # Write the analog inputs' negative channels (when applicable),
-            # ranges, stream settling time and stream resolution configuration.
-            numFrames = len(aNames)
-            print("Before Write")
-            ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
-            print("Completed write")
+        # Ensure triggered stream is disabled.
+        ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
 
-            # Configure and start stream
-            return ljm.eStreamStart(self.handle, sample_rate, num_addrs,
-                                    aScanList, scan_rate), sample_rate
+        # Enabling internally-clocked stream.
+        ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+
+        # All negative channels are single-ended, AIN0 and AIN1 ranges are
+        # +/-10 V, stream settling is 0 (default) and stream resolution
+        # index is 0 (default).
+        aNames = ["AIN_ALL_NEGATIVE_CH",
+                    *[element + "_RANGE" for element in inputs],
+                    "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
+        aValues = [ljm.constants.GND, *inputs_max_voltages,
+                    stream_setting, resolution]
+
+        # Write the analog inputs' negative channels (when applicable),
+        # ranges, stream settling time and stream resolution configuration.
+        numFrames = len(aNames)
+        print("Before Write")
+        ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
+        print("Completed write")
+
+        # Configure and start stream
+        return ljm.eStreamStart(self.handle, sample_rate, num_addrs,
+                                aScanList, scan_rate), sample_rate
 
     def collect_data(self,
                      inputs: List[str],
