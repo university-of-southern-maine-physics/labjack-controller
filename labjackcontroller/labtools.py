@@ -57,6 +57,9 @@ class LabjackReader(object):
         # Also, specify the largest index that is populated.
         self.max_index = 0
 
+        # There will be an int handle for the LabJack device
+        self.handle: int
+
         self.connection_open = False
 
     def get_connection_status(self):
@@ -87,13 +90,19 @@ class LabjackReader(object):
         Returns
         -------
         row: int
-            The number of the last row recorded in the data array
+            The number of the last row recorded in the data array,
+            or -1 on error
         """
         if not len(self.input_channels):
             raise Exception("No channels have been declared")
-        return int(self.get_max_data_index()/(len(self.input_channels) + 1))
+        max_index = self.get_max_data_index()
+        
+        if max_index < 1:
+            return -1
+        # Else...
+        return int(max_index/(len(self.input_channels) + 1))
 
-    def get_max_data_index(self, safe=True) -> int:
+    def get_max_data_index(self) -> int:
         """
         Return the largest index value that has been filled.
 
@@ -111,10 +120,6 @@ class LabjackReader(object):
 
         """
         if self.max_index is not None and self.max_index:
-            if safe:
-                tmp_max = self.max_index
-                return tmp_max - (tmp_max % (len(self.input_channels) + 1))
-            # Else...
             return self.max_index
         else:
             return -1
@@ -238,7 +243,7 @@ class LabjackReader(object):
         else:
             return self._reshape_data(max_row - num_rows, max_row)
 
-    def _open_stream(self):
+    def _open_connection(self):
         """
         Open a streaming connection to the LabJack.
 
@@ -367,7 +372,7 @@ class LabjackReader(object):
                      sample_rate=-1,
                      stream_setting=0,
                      resolution=8,
-                     verbose=False) -> Tuple[int, float, float]:
+                     verbose=False) -> Tuple[float, float]:
         """
         Collect data from the LabJack device.
 
@@ -401,9 +406,6 @@ class LabjackReader(object):
 
         Returns
         -------
-        tot_scans : int
-            The total amount of scans actually made during the data collection
-            process.
         tot_time : float
             The total amount of time actually spent collecting data
         num_skips : float
@@ -416,17 +418,17 @@ class LabjackReader(object):
         each:
 
         >>> reader = LabjackReader("T7")
-        >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 50000)
+        >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
         None
 
         """
+        # Open a connection.
+        self._open_connection()
+
         # Close the stream if it was already open; this is done
         # to prevent unexpected termination from last time messing
         # up the connection this time.
         self._close_stream()
-
-        # Open a connection.
-        self._open_stream()
 
         num_addrs = len(inputs)
 
@@ -435,7 +437,8 @@ class LabjackReader(object):
                                              scan_rate * num_addrs,
                                              sample_rate=sample_rate)
 
-        print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
+        print("\nStream started with a scan rate of %0.0f Hz."
+              % (scan_rate / num_addrs))
 
         self.input_channels = inputs
 
@@ -444,15 +447,15 @@ class LabjackReader(object):
         size = int(seconds * scan_rate * (len(inputs) + 1))
         self.data_arr = RawArray('d', size)
 
-        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
-        start = time.time()
-        total_scans = 0
         total_skip = 0  # Total skipped samples
 
         packet_num = 0
         self.max_index = 0
         step_size = len(inputs)
-        while time.time() - start < seconds:
+
+        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
+        start = time.time()
+        while self.max_index < size:
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
             curr_data = ret[0]
@@ -460,38 +463,29 @@ class LabjackReader(object):
             if verbose:
                 print("There are %d scans left on the device buffer",
                       "and %d scans left in the LJM's buffer", *ret[1:])
-            read_time = time.time() - start
 
             # We will manually calculate the times each entry occurs at.
             # The stream itself is timed by the same clock that runs
             # CORE_TIMER, and it is officially advised we use the stream
             # clocking instead.
             # See https://forums.labjack.com/index.php?showtopic=6992
-            expected_time = (sample_rate / scan_rate) * packet_num
-
-            # The delta between the expected time and the arrival time is
-            # the error + travel time
-            travel_time = read_time - expected_time
-
-            # Calculate times that the data occurred at. See the CORE_TIMER
-            # comment.
             for i in range(0, len(curr_data), step_size):
                 curr_time = sample_rate / scan_rate\
                             * (packet_num + i / sample_rate)
+
                 if self.max_index >= size - step_size:
                     break
 
                 # We get a giant 1D list back, so work with what we have.
-                for datapoint in curr_data[i:i + step_size]:
-                    self.data_arr[self.max_index] = datapoint
-                    self.max_index += 1
+                self.data_arr[self.max_index: self.max_index + step_size] =\
+                    curr_data[i:i + step_size]
+                self.max_index += step_size
 
                 # Put in the time as well
                 self.data_arr[self.max_index] = curr_time
                 self.max_index += 1
 
             packet_num += 1
-            total_scans += len(curr_data) / num_addrs
 
             # Count the skipped samples which are indicated by -9999 values
             # Missed samples occur after a device's stream buffer overflows
@@ -516,11 +510,11 @@ class LabjackReader(object):
                    \nTimed Scan Rate = %f scans/second\
                    \nTimed Sample Rate = %f samples/second\
                    \nSkipped scans = %0.0f"
-                  % (total_scans, tt, scan_rate, (total_scans / tt),
-                     (total_scans * num_addrs / tt), (total_skip / num_addrs)))
+                  % (self.max_index, tt, scan_rate, (self.max_index / tt),
+                     (self.max_index * num_addrs / tt),
+                     (total_skip / num_addrs)))
 
         # Close the connection.
         self._close_stream()
 
-        return total_scans, tt, (total_skip / num_addrs)
-
+        return tt, (total_skip / num_addrs)

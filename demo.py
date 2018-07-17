@@ -59,11 +59,11 @@ class TKWindow:
         self.inter_container.pack()
 
         # Slider for frequency of data sampling
-        self.freq_slider = Scale(self.inter_container, from_=2, to=50000,
+        self.freq_slider = Scale(self.inter_container, from_=2, to=10000,
                                  label="Frequency (Hz)", length=0.95*width,
-                                 resolution=10,
+                                 resolution=50,
                                  orient=HORIZONTAL)
-        self.freq_slider.set(30000)
+        self.freq_slider.set(5000)
         self.freq_slider.pack(side=LEFT)
 
         # Second frame to hold buttons

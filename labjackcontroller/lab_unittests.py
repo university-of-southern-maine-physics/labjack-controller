@@ -12,13 +12,13 @@ class TestLJR(unittest.TestCase):
     def populate_valid_labjack(self):
         valid_max_voltages = [10.0, 10.0, 10.0]
         valid_seconds = 5
-        valid_scan_rate = 50  # Hz
-        tot_scans, tot_time, num_skips =\
+        valid_scan_rate = 100  # Hz
+        tot_time, num_skips =\
             self.valid_connection.collect_data(self.valid_channels,
                                                valid_max_voltages,
                                                valid_seconds,
                                                valid_scan_rate)
-        return tot_scans, tot_time, num_skips
+        return tot_time, num_skips
 
     def test_init(self):
         # Device handles that should fail.
@@ -64,9 +64,13 @@ class TestLJR(unittest.TestCase):
                                             valid_max_voltages,
                                             valid_seconds,
                                             valid_scan_rate)
+
         # Now, test a valid connection multiple times.
-        for _ in range(5):
+        for _ in range(4):
             self.populate_valid_labjack()
+
+        # Assert there is no skipping.
+        self.assertEqual(self.populate_valid_labjack()[1], 0)
 
     def test_file_write(self):
         self.populate_valid_labjack()
@@ -80,14 +84,9 @@ class TestLJR(unittest.TestCase):
         # Save the first 10 rows. Should return and say it was able to save
         # "error" rows, or -1
         self.assertEqual(tmp_ljr.save_data("tmp", 0, 10), -1)
-    
-    def test_reshaping(self):
-        tot_scans, tot_time, num_skips = self.populate_valid_labjack()
 
-        num_chanels_sampled = len(self.valid_channels)
-        self.assertEqual(tot_scans * num_chanels_sampled /
-                         (num_chanels_sampled + 1),
-                         self.valid_connection.get_max_row())
+    def test_reshaping(self):
+        tot_time, num_skips = self.populate_valid_labjack()
 
 
 if __name__ == '__main__':
