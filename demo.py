@@ -17,7 +17,6 @@ from tkinter import Tk, Button, Scale, Frame, Entry, \
                     IntVar, StringVar
 
 import time
-
 import matplotlib
 matplotlib.use('TkAgg')
 
@@ -248,6 +247,7 @@ def backup(labjack: LabjackReader, backup_amt: int,
     while time.time() - start_time <= num_seconds:
         if labjack.get_max_row() > start_pos:
             print("Backup at", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+            print("Running from", start_pos, "to", start_pos + backup_amt)
             start_pos += labjack.write_data_to_file(filename,
                                                     start_pos,
                                                     start_pos + backup_amt,

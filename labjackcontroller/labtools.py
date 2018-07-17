@@ -1,6 +1,6 @@
 from labjack import ljm
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from math import ceil
 import time
 from multiprocessing import RawArray
@@ -46,28 +46,18 @@ class LabjackReader(object):
         self.type, self.connection = device_type, connection
         self.id = identifier
 
-        self.base_init()
-
-    @classmethod
-    def base_init(cls) -> None:
-        """
-        Create an uninitialized object that we can init later.
-
-        Returns
-        -------
-        None
-
-        """
         # Keep track of the input channels we're reading.
-        cls.input_channels = None
+        self.input_channels: List[str]
+        self.input_channels = []
 
         # Declare a data storage handle
-        cls.data_arr = None
+        self.data_arr: RawArray
+        self.data_arr = None
 
         # Also, specify the largest index that is populated.
-        cls.max_index = None
+        self.max_index = 0
 
-        cls.connection_open = False
+        self.connection_open = False
 
     def get_connection_status(self):
         """
@@ -99,9 +89,9 @@ class LabjackReader(object):
         row: int
             The number of the last row recorded in the data array
         """
-        if self.input_channels is None:
+        if not len(self.input_channels):
             raise Exception("No channels have been declared")
-        return self.get_max_data_index()/(len(self.input_channels) + 1)
+        return int(self.get_max_data_index()/(len(self.input_channels) + 1))
 
     def get_max_data_index(self, safe=True) -> int:
         """
@@ -159,7 +149,7 @@ class LabjackReader(object):
         num_rows : the number of rows actually written
 
         """
-        if self.input_channels is None:
+        if not len(self.input_channels):
             return -1
         if mode not in ['r+', 'w', 'w+', 'a']:
             raise Exception("Invalid file write mode specified.")
@@ -215,7 +205,7 @@ class LabjackReader(object):
         # Else...
         return None
 
-    def get_data(self, num_rows) -> List[List[float]]:
+    def get_data(self, num_rows) -> Union[List[List[float]], None]:
         """
         Return data in latest array.
 
@@ -230,6 +220,7 @@ class LabjackReader(object):
         array_like: ndarray
             A 2D array in the shape (ceil(1d data len/ number of channels),
                                      number of channels)
+
         Notes
         -----
         If the internal data array has not been initialized yet, the return
@@ -471,7 +462,7 @@ class LabjackReader(object):
             # CORE_TIMER, and it is officially advised we use the stream
             # clocking instead.
             # See https://forums.labjack.com/index.php?showtopic=6992
-            expected_time = (sample_rate/scan_rate)*packet_num
+            expected_time = (sample_rate / scan_rate) * packet_num
 
             # The delta between the expected time and the arrival time is
             # the error + travel time
@@ -496,8 +487,7 @@ class LabjackReader(object):
 
             packet_num += 1
             aData = ret[0]
-            scans = len(aData) / num_addrs
-            totScans += scans
+            totScans += len(aData) / num_addrs
 
             # Count the skipped samples which are indicated by -9999 values
             # Missed samples occur after a device's stream buffer overflows
