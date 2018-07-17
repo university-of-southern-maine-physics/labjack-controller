@@ -94,7 +94,7 @@ class TKWindow:
         # Dropdown to select the device type we're connecting to.
         device_type_dropdown = OptionMenu(self.button_container,
                                           self.device_type,
-                                          *["T7", "T3", "U6"])
+                                          *["T7", "T4"])
         device_type_dropdown.pack(side=LEFT)
 
         # Third frame to hold channel checkboxes.
@@ -102,7 +102,8 @@ class TKWindow:
         self.filename_container.pack()
 
         # Textbox to get a filename for this datarun
-        filename_box = Entry(self.filename_container, textvariable=self.filename)
+        filename_box = Entry(self.filename_container,
+                             textvariable=self.filename)
 
         # Remove the default text of 0 and replace it with a meaningful
         # message
@@ -240,7 +241,7 @@ def backup(labjack: LabjackReader, backup_amt: int,
 
     # Write header only. The labjack may not be initialized yet, so keep
     # trying until it works.
-    while labjack.write_data_to_file(filename, 0, 0, mode='w', header=True) < 0:
+    while labjack.save_data(filename, 0, 0, mode='w', header=True) < 0:
         continue
 
     # Write data until time is up.
@@ -248,16 +249,16 @@ def backup(labjack: LabjackReader, backup_amt: int,
         if labjack.get_max_row() > start_pos:
             print("Backup at", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
             print("Running from", start_pos, "to", start_pos + backup_amt)
-            start_pos += labjack.write_data_to_file(filename,
-                                                    start_pos,
-                                                    start_pos + backup_amt,
-                                                    mode='a')
+            start_pos += labjack.save_data(filename,
+                                           start_pos,
+                                           start_pos + backup_amt,
+                                           mode='a')
     print("Saving from rows", start_pos, "to", labjack.get_max_row())
 
     # Save the rest
-    labjack.write_data_to_file(filename, start_pos,
-                               labjack.get_max_row() + 1,
-                               mode='a')
+    labjack.save_data(filename, start_pos,
+                      labjack.get_max_row() + 1,
+                      mode='a')
 
 
 def plotting_func(labjack: LabjackReader, num_seconds: int, sample_rate: int):

@@ -19,7 +19,7 @@ class LabjackReader(object):
         Parameters
         ----------
         type : str
-            A LabJack model, such as T7, U6, or U3.
+            A LabJack model, such as T7 or T4
         connection : {'ANY', 'USB', 'ETHERNET', or 'WIFI'}, optional
             Valid optionas are
             'ANY' for attempting any mode of connection
@@ -119,12 +119,10 @@ class LabjackReader(object):
         else:
             return -1
 
-    def write_data_to_file(self, filename: str,
-                           row_start: int, row_end: int,
-                           mode='w',
-                           header=False) -> int:
+    def save_data(self, filename: str, row_start: int, row_end: int, mode='w',
+                  header=False) -> int:
         """
-        Write a queue of datapoints to a file named filename.
+        Write recorded datapoints to a file named filename.
 
         Parameters
         ----------
@@ -369,7 +367,7 @@ class LabjackReader(object):
                      sample_rate=-1,
                      stream_setting=0,
                      resolution=8,
-                     verbose=False) -> None:
+                     verbose=False) -> Tuple[int, float, float]:
         """
         Collect data from the LabJack device.
 
@@ -396,14 +394,20 @@ class LabjackReader(object):
             device. -1 indicates the maximum possible sample rate.
         stream_setting : int, optional
             See official LabJack documentation.
-        resolution: int, optional
+        resolution : int, optional
             See official LabJack documentation.
         verbose : str, optional
             If enabled, will print out statistics about each read.
 
         Returns
         -------
-        None
+        tot_scans : int
+            The total amount of scans actually made during the data collection
+            process.
+        tot_time : float
+            The total amount of time actually spent collecting data
+        num_skips : float
+            The number of skipped datapoints.
 
         Examples
         --------
@@ -442,8 +446,8 @@ class LabjackReader(object):
 
         # Python 3.7 has time_ns, upgrade to this when Conda supports it.
         start = time.time()
-        totScans = 0
-        totSkip = 0  # Total skipped samples
+        total_scans = 0
+        total_skip = 0  # Total skipped samples
 
         packet_num = 0
         self.max_index = 0
@@ -486,33 +490,37 @@ class LabjackReader(object):
                 self.max_index += 1
 
             packet_num += 1
-            aData = ret[0]
-            totScans += len(aData) / num_addrs
+            curr_data = ret[0]
+            total_scans += len(curr_data) / num_addrs
 
             # Count the skipped samples which are indicated by -9999 values
             # Missed samples occur after a device's stream buffer overflows
             # and are reported after auto-recover mode ends.
-            curSkip = aData.count(-9999.0)
-            totSkip += curSkip
+            curr_skip = curr_data.count(-9999.0)
+            total_skip += curr_skip
 
             ainStr = ""
             for j in range(0, num_addrs):
-                ainStr += "%s = %0.5f, " % (inputs[j], aData[j])
-            if curSkip:
-                print("Scans Skipped = %0.0f" % (curSkip/num_addrs))
+                ainStr += "%s = %0.5f, " % (inputs[j], curr_data[j])
+            if curr_skip:
+                print("Scans Skipped = %0.0f" % (curr_skip/num_addrs))
 
         # We are done, record the actual ending time.
         end = time.time()
 
         tt = end - start
-        print("\nTotal scans = %i\
-              \nTime taken = %f seconds\
-              \nLJM Scan Rate = %f scans/second\
-              \nTimed Scan Rate = %f scans/second\
-              \nTimed Sample Rate = %f samples/second\
-              \nSkipped scans = %0.0f"
-              % (totScans, tt, scan_rate, (totScans / tt),
-                 (totScans * num_addrs / tt), (totSkip / num_addrs)))
+        if verbose:
+            print("\nTotal scans = %i\
+                   \nTime taken = %f seconds\
+                   \nLJM Scan Rate = %f scans/second\
+                   \nTimed Scan Rate = %f scans/second\
+                   \nTimed Sample Rate = %f samples/second\
+                   \nSkipped scans = %0.0f"
+                  % (total_scans, tt, scan_rate, (total_scans / tt),
+                     (total_scans * num_addrs / tt), (total_skip / num_addrs)))
 
         # Close the connection.
         self._close_stream()
+
+        return total_scans, tt, (total_skip / num_addrs)
+
