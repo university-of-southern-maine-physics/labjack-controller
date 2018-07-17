@@ -7,16 +7,18 @@ class TestLJR(unittest.TestCase):
     def setUp(self):
         self.valid_device = "T7"
         self.valid_connection = LabjackReader(self.valid_device)
+        self.valid_channels = ["AIN0", "AIN1", "AIN2"]
 
     def populate_valid_labjack(self):
-        valid_channels = ["AIN0", "AIN1", "AIN2"]
         valid_max_voltages = [10.0, 10.0, 10.0]
         valid_seconds = 5
         valid_scan_rate = 50  # Hz
-        self.valid_connection.collect_data(valid_channels,
-                                           valid_max_voltages,
-                                           valid_seconds,
-                                           valid_scan_rate)
+        tot_scans, tot_time, num_skips =\
+            self.valid_connection.collect_data(self.valid_channels,
+                                               valid_max_voltages,
+                                               valid_seconds,
+                                               valid_scan_rate)
+        return tot_scans, tot_time, num_skips
 
     def test_init(self):
         # Device handles that should fail.
@@ -70,14 +72,22 @@ class TestLJR(unittest.TestCase):
         self.populate_valid_labjack()
 
         # Our populated LJR should work.
-        self.assertEquals(self.valid_connection.save_data("tmp", 0, 10), 10)
+        self.assertEqual(self.valid_connection.save_data("tmp", 0, 10), 10)
 
         # There should be no data, so we expect an exception.
         tmp_ljr = LabjackReader(self.valid_device)
 
         # Save the first 10 rows. Should return and say it was able to save
         # "error" rows, or -1
-        self.assertEquals(tmp_ljr.save_data("tmp", 0, 10), -1)
+        self.assertEqual(tmp_ljr.save_data("tmp", 0, 10), -1)
+    
+    def test_reshaping(self):
+        tot_scans, tot_time, num_skips = self.populate_valid_labjack()
+
+        num_chanels_sampled = len(self.valid_channels)
+        self.assertEqual(tot_scans * num_chanels_sampled /
+                         (num_chanels_sampled + 1),
+                         self.valid_connection.get_max_row())
 
 
 if __name__ == '__main__':

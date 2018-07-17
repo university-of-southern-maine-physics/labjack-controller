@@ -199,13 +199,13 @@ class TKWindow:
         if not channel_sum:
             self.freq_slider.config(to=0)
         elif channel_sum == 1:
-            self.freq_slider.config(to=105000)
+            self.freq_slider.config(to=30000)
         elif channel_sum == 2:
-            self.freq_slider.config(to=75000)
+            self.freq_slider.config(to=15000)
         elif channel_sum == 3:
-            self.freq_slider.config(to=36000)
+            self.freq_slider.config(to=10000)
         elif channel_sum == 4:
-            self.freq_slider.config(to=25000)
+            self.freq_slider.config(to=7500)
 
         # Update in the next ms.
         self.master.after(1, self.update_gui)
@@ -276,7 +276,7 @@ def plotting_func(labjack: LabjackReader, num_seconds: int, sample_rate: int):
             continue
         ax.clear()
 
-        unzipped = list(zip(*data[::int(sample_rate/100)]))
+        unzipped = list(zip(*data[::max(int(sample_rate/100), 1)]))
         t_arr = unzipped[-1]
         for sig in unzipped[:-1]:
             ax.plot(t_arr, sig)

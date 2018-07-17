@@ -432,7 +432,7 @@ class LabjackReader(object):
 
         scan_rate, sample_rate = self._setup(inputs, inputs_max_voltages,
                                              stream_setting, resolution,
-                                             scan_rate,
+                                             scan_rate * num_addrs,
                                              sample_rate=sample_rate)
 
         print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
@@ -455,6 +455,7 @@ class LabjackReader(object):
         while time.time() - start < seconds:
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
+            curr_data = ret[0]
 
             if verbose:
                 print("There are %d scans left on the device buffer",
@@ -474,14 +475,14 @@ class LabjackReader(object):
 
             # Calculate times that the data occurred at. See the CORE_TIMER
             # comment.
-            for i in range(0, len(ret[0]) - 1, step_size):
+            for i in range(0, len(curr_data), step_size):
                 curr_time = sample_rate / scan_rate\
                             * (packet_num + i / sample_rate)
                 if self.max_index >= size - step_size:
                     break
 
                 # We get a giant 1D list back, so work with what we have.
-                for datapoint in ret[0][i:i + step_size]:
+                for datapoint in curr_data[i:i + step_size]:
                     self.data_arr[self.max_index] = datapoint
                     self.max_index += 1
 
@@ -490,7 +491,6 @@ class LabjackReader(object):
                 self.max_index += 1
 
             packet_num += 1
-            curr_data = ret[0]
             total_scans += len(curr_data) / num_addrs
 
             # Count the skipped samples which are indicated by -9999 values
