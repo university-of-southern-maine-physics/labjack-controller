@@ -214,7 +214,7 @@ class TKWindow:
 def backup(labjack: LabjackReader, backup_amt: int,
            filename: str, num_seconds: int) -> None:
     """
-    Backup data realtime.
+    Backup data real-time.
 
     Parameters
     ----------
@@ -227,7 +227,7 @@ def backup(labjack: LabjackReader, backup_amt: int,
         The name of the file to write to.
         If it does not exist yet, it will be created.
     num_seconds: int
-        The number of seconds to try realtime backup.
+        The number of seconds to try real-time backup.
         After this time, write any remaining data in
         the labjack's buffer.
 
@@ -236,8 +236,8 @@ def backup(labjack: LabjackReader, backup_amt: int,
     None
 
     """
-    start_pos = 0
-    start_time = time.time()
+    start_pos: int = 0
+    start_time: float = time.time()
 
     # Write header only. The labjack may not be initialized yet, so keep
     # trying until it works.

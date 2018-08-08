@@ -21,7 +21,7 @@ class LabjackReader(object):
         type : str
             A LabJack model, such as T7 or T4
         connection : {'ANY', 'USB', 'ETHERNET', or 'WIFI'}, optional
-            Valid optionas are
+            Valid options are
             'ANY' for attempting any mode of connection
             'USB' for attempting connection over USB
             'ETHERNET' for attempting connection over Ethernet
@@ -96,7 +96,7 @@ class LabjackReader(object):
         if not len(self.input_channels):
             raise Exception("No channels have been declared")
         max_index = self.get_max_data_index()
-        
+
         if max_index < 1:
             return -1
         # Else...
@@ -108,10 +108,7 @@ class LabjackReader(object):
 
         Parameters
         ----------
-        safe : bool, optional
-            If True, will return the last multiple of the number of
-            input channels + time. This is used to safely index
-            an under-construction data array and get data points easily.
+        None
 
         Returns
         -------
@@ -127,15 +124,15 @@ class LabjackReader(object):
     def save_data(self, filename: str, row_start: int, row_end: int, mode='w',
                   header=False) -> int:
         """
-        Write recorded datapoints to a file named filename.
+        Write recorded data points to a file named filename.
 
         Parameters
         ----------
         filename : str
             A filename, such as "xyz.txt", that specifies this file.
-        row_start : The datapoint across all channels to start from.
+        row_start : The data point across all channels to start from.
                     0 is the very first one ever recorded.
-        row_end : The last datapoint to include (eg. 10th).
+        row_end : The last data point to include (eg. 10th).
                   If a value greater than the number of rows present
                   is given, only the rows present will be backed up
                   and no error will be thrown.
@@ -159,6 +156,7 @@ class LabjackReader(object):
         if not isinstance(filename, str) or not len(filename):
             raise Exception("Bad filename given.")
 
+        """
         with open(filename, mode) as f:
             # Write header.
             if header:
@@ -177,6 +175,17 @@ class LabjackReader(object):
                     f.write(" ".join([str(item) for item in signal]) + '\n')
                 return len(curr_queue)
             return 0
+        """
+        if header:
+            with open(filename, mode) as f:
+                f.write(",".join(self.input_channels) + ',time\n')
+        else:
+            with open(filename, 'ab') as f:
+                curr_data = self._reshape_data(row_start, row_end)
+                if curr_data is not None:
+                    np.savetxt(f, self._reshape_data(row_start, row_end), delimiter=',')
+                    return len(curr_data)
+        return 0
 
     def _reshape_data(self, from_row: int, to_row: int):
         """
@@ -192,8 +201,8 @@ class LabjackReader(object):
         Returns
         -------
         array_like: ndarray
-            A 2D array, starting at from_row, of datapoints, where
-            every row is one datapoint across all channels.
+            A 2D array, starting at from_row, of data points, where
+            every row is one data point across all channels.
         """
         if (self.data_arr is not None and self.get_max_data_index() != -1
            and from_row >= 0):
@@ -321,9 +330,9 @@ class LabjackReader(object):
 
         """
         # Sanity check on inputs
-        num_addrs = len(inputs)
+        num_addresses: int = len(inputs)
+        max_sample_rate: int = scan_rate * num_addresses
 
-        max_sample_rate = scan_rate * num_addrs
         if sample_rate == -1:
             sample_rate = max_sample_rate
         elif sample_rate > max_sample_rate:
@@ -331,7 +340,7 @@ class LabjackReader(object):
             sample_rate = max_sample_rate
 
         # Declare the ports we want to read, EG. AIN0 & AIN1
-        aScanList = ljm.namesToAddresses(num_addrs, inputs)[0]
+        scan_list = ljm.namesToAddresses(num_addresses, inputs)[0]
 
         # If a packet is lost, configure the device to try and get it again.
         ljm.writeLibraryConfigS("LJM_RETRY_ON_TRANSACTION_ID_MISMATCH", 1)
@@ -349,20 +358,20 @@ class LabjackReader(object):
         # All negative channels are single-ended, AIN0 and AIN1 ranges are
         # +/-10 V, stream settling is 0 (default) and stream resolution
         # index is 0 (default).
-        aNames = ["AIN_ALL_NEGATIVE_CH",
-                  *[element + "_RANGE" for element in inputs],
-                  "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX"]
-        aValues = [ljm.constants.GND, *inputs_max_voltages,
-                   stream_setting, resolution]
+        names = ("AIN_ALL_NEGATIVE_CH",
+                 *[element + "_RANGE" for element in inputs],
+                 "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX")
+        values = (ljm.constants.GND, *inputs_max_voltages,
+                  stream_setting, resolution)
 
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
-        numFrames = len(aNames)
-        ljm.eWriteNames(self.handle, numFrames, aNames, aValues)
+        num_frames: int = len(names)
+        ljm.eWriteNames(self.handle, num_frames, names, values)
 
         # Configure and start stream
-        return ljm.eStreamStart(self.handle, sample_rate, num_addrs,
-                                aScanList, scan_rate), sample_rate
+        return ljm.eStreamStart(self.handle, sample_rate, num_addresses,
+                                scan_list, scan_rate), sample_rate
 
     def collect_data(self,
                      inputs: List[str],
@@ -392,7 +401,7 @@ class LabjackReader(object):
             long as this value, and will try to stop streaming when this time
             has been met.
         scan_rate : int
-            Number of times per second (Hz) the device will get a datapoint for
+            Number of times per second (Hz) the device will get a data point for
             each of the channels specified.
         sample_rate : int, optional
             Number of data points contained in a packet sent by the LabJack
@@ -409,7 +418,7 @@ class LabjackReader(object):
         tot_time : float
             The total amount of time actually spent collecting data
         num_skips : float
-            The number of skipped datapoints.
+            The number of skipped data points.
 
         Examples
         --------
@@ -434,11 +443,10 @@ class LabjackReader(object):
 
         scan_rate, sample_rate = self._setup(inputs, inputs_max_voltages,
                                              stream_setting, resolution,
-                                             scan_rate * num_addrs,
+                                             scan_rate,
                                              sample_rate=sample_rate)
 
-        print("\nStream started with a scan rate of %0.0f Hz."
-              % (scan_rate / num_addrs))
+        print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
 
         self.input_channels = inputs
 
@@ -470,8 +478,7 @@ class LabjackReader(object):
             # clocking instead.
             # See https://forums.labjack.com/index.php?showtopic=6992
             for i in range(0, len(curr_data), step_size):
-                curr_time = sample_rate / scan_rate\
-                            * (packet_num + i / sample_rate)
+                curr_time = (sample_rate / scan_rate) * (packet_num + (i / len(curr_data)))
 
                 if self.max_index >= size - step_size:
                     break
