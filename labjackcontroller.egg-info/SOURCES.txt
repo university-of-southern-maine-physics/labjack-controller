@@ -1,0 +1,9 @@
+README.md
+labjackcontroller/lab_unittests.py
+labjackcontroller/labtools.py
+labjackcontroller.egg-info/PKG-INFO
+labjackcontroller.egg-info/SOURCES.txt
+labjackcontroller.egg-info/dependency_links.txt
+labjackcontroller.egg-info/not-zip-safe
+labjackcontroller.egg-info/requires.txt
+labjackcontroller.egg-info/top_level.txt

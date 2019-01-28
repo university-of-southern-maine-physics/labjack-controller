@@ -18,10 +18,9 @@ from tkinter import Tk, Button, Scale, Frame, Entry, \
 
 import time
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
-
 
 class TKWindow:
     def __init__(self, width=1366, height=768) -> None:
@@ -174,6 +173,7 @@ class TKWindow:
                                   frequency),
                             kwargs={'resolution': 0})
 
+
         # Declare a graphing process
         graph_proc = Process(target=plotting_func, args=(my_lj, duration,
                                                          frequency))
@@ -184,11 +184,11 @@ class TKWindow:
 
         # Start all threads, and join when finished.
         data_proc.start()
-        graph_proc.start()
+        #graph_proc.start()
         backup_proc.start()
 
         data_proc.join()
-        graph_proc.join()
+        #graph_proc.join()
         backup_proc.join()
 
     def update_gui(self) -> None:
@@ -253,7 +253,6 @@ def backup(labjack: LabjackReader, backup_amt: int,
                                            start_pos,
                                            start_pos + backup_amt,
                                            mode='a')
-    print("Saving from rows", start_pos, "to", labjack.get_max_row())
 
     # Save the rest
     labjack.save_data(filename, start_pos,

@@ -4,8 +4,25 @@ from typing import List, Tuple, Union
 from math import ceil
 import time
 from multiprocessing import RawArray
+from colorama import init, Fore
+init()
 
 
+T7_TYPE = {"name": "T7",
+           "command_response": {1: {"bits": 16,   "microvolts": 316,   "sample_time_ms": 0.04},
+                                2: {"bits": 16.5, "microvolts": 223,   "sample_time_ms": 0.04},
+                                3: {"bits": 17,   "microvolts": 158,   "sample_time_ms": 0.1},
+                                4: {"bits": 17.5, "microvolts": 112,   "sample_time_ms": 0.1},
+                                5: {"bits": 17.9, "microvolts": 84.6,  "sample_time_ms": 0.2},
+                                6: {"bits": 18.3, "microvolts": 64.1,  "sample_time_ms": 0.3},
+                                7: {"bits": 18.8, "microvolts": 45.3,  "sample_time_ms": 0.6},
+                                8: {"bits": 19.1, "microvolts": 36.8,  "sample_time_ms": 1.1},
+                                9: {"bits": 19.6, "microvolts": 26.0,  "sample_time_ms": 3.5},
+                                10: {"bits": 20.5, "microvolts": 14.0, "sample_time_ms": 13.4},
+                                11: {"bits": 21.3, "microvolts": 8.02, "sample_time_ms": 66.2},
+                                12: {"bits": 21.4, "microvolts": 7.48, "sample_time_ms": 159},
+                               }
+            }
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
@@ -18,7 +35,7 @@ class LabjackReader(object):
 
         Parameters
         ----------
-        type : str
+        device_type : str
             A LabJack model, such as T7 or T4
         connection : {'ANY', 'USB', 'ETHERNET', or 'WIFI'}, optional
             Valid options are
@@ -40,7 +57,8 @@ class LabjackReader(object):
         # Handle if we were given bad args to initialize on.
         if not (isinstance(device_type, str)
                 and isinstance(connection, str)
-                and isinstance(identifier, str)):
+                and isinstance(identifier, str)
+                or (device_type != "T7" or device_type != "T4")):
             raise Exception("Invalid initialization parameters provided")
 
         self.type, self.connection = device_type, connection
@@ -252,7 +270,7 @@ class LabjackReader(object):
         else:
             return self._reshape_data(max_row - num_rows, max_row)
 
-    def _open_connection(self):
+    def _open_connection(self, verbose=True):
         """
         Open a streaming connection to the LabJack.
 
@@ -272,13 +290,14 @@ class LabjackReader(object):
             self.connection_open = True
 
             info = ljm.getHandleInfo(self.handle)
-            print("Opened a LabJack with Device type: %i,\n"
-                  "Connection type: %i, Serial number: %i,\n"
-                  "IP address: %s, Port: %i, Max bytes per MB: %i"
-                  % (info[0], info[1], info[2],
-                     ljm.numberToIP(info[3]), info[4], info[5]))
+            if verbose:
+                print("Opened a LabJack with Device type: %i,\n"
+                    "Connection type: %i, Serial number: %i,\n"
+                    "IP address: %s, Port: %i, Max bytes per MB: %i"
+                    % (info[0], info[1], info[2],
+                        ljm.numberToIP(info[3]), info[4], info[5]))
 
-    def _close_stream(self) -> None:
+    def _close_stream(self, verbose=False) -> None:
         """
         Close a streaming connection to the LabJack.
 
@@ -293,9 +312,10 @@ class LabjackReader(object):
         """
         if self.connection_open:
             # Try to close the stream
-            print("\nStop Stream")
             ljm.eStreamStop(self.handle)
             self.connection_open = False
+            if verbose:
+                print("\nStream stopped.")
 
     def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
                scan_rate, sample_rate=-1) -> Tuple[int, int]:
@@ -372,6 +392,184 @@ class LabjackReader(object):
         # Configure and start stream
         return ljm.eStreamStart(self.handle, sample_rate, num_addresses,
                                 scan_list, scan_rate), sample_rate
+    
+    def find_max_freq(self,
+                  inputs: List[str],
+                  inputs_max_voltages: List[float],
+                  stream_setting=0,
+                  resolution=0,
+                  verbose=True):
+        """
+        Determine the maximum frequency and number of elements per packet this
+        device can sample at without overflowing any buffers.
+
+        Parameters
+        ----------
+        inputs : sequence of strings
+            Names of input channels on the LabJack device to read.
+            Must correspond to the actual name on the device.
+        inputs_max_voltages : sequence of real values
+            Maximum voltages corresponding element-wise to the channels
+            listed in inputs.
+        stream_setting : int, optional
+            See official LabJack documentation.
+        resolution : int, optional
+            See official LabJack documentation.
+        verbose : str, optional
+            If enabled, will print out statistics about each read.
+
+        Returns
+        -------
+        scan_rate : int
+            Number of times per second (Hz) the device will get a data point for
+            each of the channels specified.
+        sample_rate : int, optional
+            Number of data points contained in a packet sent by the LabJack
+            device.
+
+        Examples
+        --------
+        Find out the maximum (Hz, items/packet) an arbitrary LabJack T7 can
+        read from the channels AIN0, AIN1 each having a maximum voltage of
+        10V.
+
+        Output varies depending upon many factors, such as connection method
+        to the LabJack, the device itself, and so forth.
+
+        >>> reader = LabjackReader("T7")
+        >>> reader.find_max_freq(["AIN0", "AIN1"], [10.0, 10.0])
+        (57400.0, 1024)
+
+        """
+    
+        try:
+            self._close_stream()
+        except:
+            pass
+
+
+        MAX_BUFFERSIZE = 10
+        NUM_SECONDS = 20
+        min_rate = 0
+        med_rate = 100
+        max_rate = 0
+
+        exponential_mode = True
+
+        # The number of elements we get back in a packet.
+        start_sample_rate = 1
+
+        last_good_rate = -1
+        last_good_sample = -1
+
+        while(1):
+            # First, try to start at the rate specified.
+            opened = False
+            valid_config = False
+
+            while not opened:
+                try:
+                    # Open a connection.
+                    self._open_connection(verbose=False)
+                    scan_rate, sample_rate = self._setup(inputs,
+                                                        inputs_max_voltages,
+                                                        stream_setting,
+                                                        resolution,
+                                                        med_rate,
+                                                        sample_rate=start_sample_rate)
+                except:
+                    if start_sample_rate < med_rate:
+                        # First, try increasing the number of elements per packet.
+                        start_sample_rate = min(2 * start_sample_rate, med_rate)
+                    else:
+                        # Step down, and turn off exponential mode
+                        exponential_mode = False
+                        start_sample_rate = 1
+                        max_rate = med_rate
+                        med_rate = (min_rate + med_rate) / 2
+
+                        if (int(med_rate) == int(min_rate)
+                        or int(med_rate) == int(max_rate)):
+                            self._close_stream()
+                            return last_good_rate - (last_good_rate % 100), last_good_sample
+                else:
+                    opened = True
+
+            iterations = 0
+            buffer_size = 0
+            num_skips = 0
+            max_buffer_size = 0
+        
+            try:
+                while buffer_size < MAX_BUFFERSIZE and iterations < NUM_SECONDS * scan_rate:
+                    # Read all rows of data off of the latest packet in the stream.
+                    ret = ljm.eStreamRead(self.handle)
+                    buffer_size = ret[2]
+                    num_skips = ret[0].count(-9999.0)
+                    max_buffer_size = max(max_buffer_size, buffer_size)
+                    iterations += len(ret[0])
+
+                    if buffer_size >= MAX_BUFFERSIZE or num_skips:
+                        if start_sample_rate < med_rate:
+                            # First, try increasing the number of elements per packet.
+                            start_sample_rate = min(2 * start_sample_rate, med_rate)
+                        else:
+                            # Step down, and turn off exponential mode
+                            start_sample_rate = 1
+                            max_rate = med_rate
+                            med_rate = (min_rate + med_rate) / 2
+                            exponential_mode = False
+
+                            if (int(med_rate) == int(min_rate)
+                                or int(med_rate) == int(max_rate)):
+                                # Go to last good and terminate.
+                                self._close_stream()
+                                return last_good_rate - (last_good_rate % 100), last_good_sample
+
+                        # In all cases, try again.
+                        break
+
+            except ljm.LJMError:
+                if start_sample_rate < med_rate:
+                    # First, try increasing the number of elements per packet.
+                    start_sample_rate = min(2 * start_sample_rate, med_rate)
+                else:
+                    # Step down, and turn off exponential mode
+                    start_sample_rate = 1
+                    max_rate = med_rate
+                    med_rate = (min_rate + med_rate) / 2
+                    exponential_mode = False
+                    break
+            else:
+                if buffer_size < MAX_BUFFERSIZE and not num_skips:
+                    # Store these working values
+                    last_good_rate = med_rate
+                    last_good_sample = start_sample_rate
+                    valid_config = True
+        
+                    if exponential_mode:
+                        # Exponentially (const * 2^n) increase the upper
+                        # search bound. Recalculate the midpoint.
+                        min_rate = med_rate
+                        max_rate = 2 * med_rate
+                        med_rate = 1.5 * med_rate
+                    else:
+                        # Step up
+                        min_rate = med_rate
+                        med_rate = (max_rate + med_rate) / 2
+
+                    if (int(med_rate) == int(min_rate)
+                    or int(med_rate) == int(max_rate)):
+                        self._close_stream()
+                        return last_good_rate - (last_good_rate % 100), last_good_sample
+            finally:
+                self._close_stream()
+                if verbose:
+                    print(Fore.GREEN + "[PASS]" if valid_config else Fore.RED + "[FAIL]",
+                          Fore.RESET + "Finished a stream with an effective scan rate of %5.0f Hz @ %5d points / packet; "
+                          "buffer had at most %s%3d%s items remaining. Frequency search range is [%5d, %5d]." % (scan_rate, start_sample_rate, (Fore.RED if max_buffer_size >= MAX_BUFFERSIZE else Fore.RESET), max_buffer_size, Fore.RESET, min_rate, max_rate),
+                          "There were " + (Fore.RED if num_skips else Fore.RESET) + str(num_skips) + Fore.RESET + " skips.")
+
 
     def collect_data(self,
                      inputs: List[str],
@@ -437,7 +635,7 @@ class LabjackReader(object):
         # Close the stream if it was already open; this is done
         # to prevent unexpected termination from last time messing
         # up the connection this time.
-        self._close_stream()
+        #self._close_stream()
 
         num_addrs = len(inputs)
 
@@ -469,8 +667,7 @@ class LabjackReader(object):
             curr_data = ret[0]
 
             if verbose:
-                print("There are %d scans left on the device buffer",
-                      "and %d scans left in the LJM's buffer", *ret[1:])
+                print("There are %d scans left on the device buffer and %d scans left in the LJM's buffer" % (ret[1], ret[2]))
 
             # We will manually calculate the times each entry occurs at.
             # The stream itself is timed by the same clock that runs
