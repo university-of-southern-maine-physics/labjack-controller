@@ -480,8 +480,8 @@ class LabjackReader(object):
         self._close_stream()
 
 
-        MAX_BUFFERSIZE = 10
-        MAX_LJM_BUFFERSIZE = 20
+        MAX_BUFFERSIZE = 5
+        MAX_LJM_BUFFERSIZE = 5
         NUM_SECONDS = 20
         min_rate = 0
         med_rate = 100
@@ -695,38 +695,39 @@ class LabjackReader(object):
 
         self.input_channels = inputs
 
-        # Create a RawArray for multiple processes; this array
-        # stores our data.
-        size = int(seconds * scan_rate * (len(inputs) + 2))
-        self.data_arr = RawArray('d', size)
-
         total_skip = 0  # Total skipped samples
 
         packet_num = 0
         self.max_index = 0
         step_size = len(inputs)
 
+        # Create a RawArray for multiple processes; this array
+        # stores our data.
+        size = int(seconds * scan_rate * (len(inputs) + 2))
+    
+        self.data_arr = RawArray('d', int(size))
+
         # Python 3.7 has time_ns, upgrade to this when Conda supports it.
         start = time.time_ns()
-        while self.max_index <= size - step_size - 1:
+        while self.max_index < size:
             # Read all rows of data off of the latest packet in the stream.
             ret = ljm.eStreamRead(self.handle)
             curr_data = ret[0]
 
             if verbose:
-                print("[%s] There are %d scans left on the device buffer and %d scans left in the LJM's buffer" % (datetime.datetime.now(), ret[1], ret[2]))
+                print("[%s] (%d/%d) (%d) (%d) There are %d scans left on the device buffer and %d scans left in the LJM's buffer" % (datetime.datetime.now(), self.max_index, size, size - self.max_index, len(curr_data), ret[1], ret[2]))
 
-            # We will manually calculate the times each entry occurs at.
-            # The stream itself is timed by the same clock that runs
-            # CORE_TIMER, and it is officially advised we use the stream
-            # clocking instead.
-            # See https://forums.labjack.com/index.php?showtopic=6992
+            # Ensure that this packet won't overflow our buffer.
+            if self.max_index + ((len(curr_data) / step_size) * (2 + step_size)) > size:
+                break
 
             for i in range(0, len(curr_data), step_size):
+                # We will manually calculate the times each entry occurs at.
+                # The stream itself is timed by the same clock that runs
+                # CORE_TIMER, and it is officially advised we use the stream
+                # clocking instead.
+                # See https://forums.labjack.com/index.php?showtopic=6992
                 curr_time = (sample_rate / scan_rate) * (packet_num + (i / len(curr_data)))
-
-                if self.max_index >= size - step_size:
-                    break
 
                 # We get a giant 1D list back, so work with what we have.
                 self.data_arr[self.max_index: self.max_index + step_size] =\
@@ -738,7 +739,6 @@ class LabjackReader(object):
                 self.max_index += 1
                 self.data_arr[self.max_index] = time.time_ns() - start
                 self.max_index += 1
-
 
             packet_num += 1
 
