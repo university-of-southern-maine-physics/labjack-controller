@@ -38,7 +38,7 @@ class LabjackReader(object):
         Parameters
         ----------
         device_type : str
-            A LabJack model, such as T7 or T4
+            A LabJack model, such as T7, T4, or DIGIT
         connection : {'ANY', 'USB', 'ETHERNET', or 'WIFI'}, optional
             Valid options are
             'ANY' for attempting any mode of connection
@@ -480,9 +480,9 @@ class LabjackReader(object):
         self._close_stream()
 
 
-        MAX_BUFFERSIZE = 5
-        MAX_LJM_BUFFERSIZE = 5
-        NUM_SECONDS = 20
+        MAX_BUFFERSIZE = 2
+        MAX_LJM_BUFFERSIZE = 2
+        NUM_SECONDS = 30
         min_rate = 0
         med_rate = 100
         max_rate = 0
@@ -516,7 +516,7 @@ class LabjackReader(object):
                                                         med_rate,
                                                         sample_rate=start_sample_rate)
                 except:
-                    print("...failed.")
+                    print(Fore.RED + "...failed." + Fore.RESET)
                     if start_sample_rate < med_rate:
                         # First, try increasing the number of elements per packet.
                         start_sample_rate = min(2 * start_sample_rate, med_rate)
@@ -535,7 +535,7 @@ class LabjackReader(object):
                     opened = True
                     print_packet_size = start_sample_rate
                     print_frequency = med_rate
-                    print("...opened.")
+                    print(Fore.GREEN + "...opened." + Fore.RESET)
 
             iterations = 0
             buffer_size = 0
