@@ -34,7 +34,7 @@ channels = ["AIN0", "AIN1"]
 myLabjack.collect_data(channels, max_channel_voltages, duration, scan_rate)
 
 # Get all data recorded as a 2D Numpy array
-my_data = myLabjack.get_data(-1)
+my_data = myLabjack.to_list()
 ```
 
 ## Contributors
