@@ -99,7 +99,7 @@ class LabjackReader(object):
     def __str__(self):
         return self.__repr__() + " Max packet size in bytes: %i" \
                % (self.meta_max_packet_size.value)
-    
+
     def __repr__(self):
         # Make sure we have a connection open.
         if not self.connection_open:
@@ -182,7 +182,7 @@ class LabjackReader(object):
             else:
                 raise ljm.ljm.LJMError(error)
 
-        return ljm_c_arr_to_list(packet_data), device_buffer_backlog.value, \
+        return packet_data, device_buffer_backlog.value, \
                ljm_buffer_backlog.value
 
     def get_connection_status(self):
@@ -805,7 +805,7 @@ class LabjackReader(object):
         # stores our data.
         size = int(seconds * scan_rate * (len(inputs) + 2))
 
-        self.data_arr = RawArray('d', int(size))
+        self.data_arr = (ctypes.c_double * size)(size)
 
         # Python 3.7 has time_ns, upgrade to this when Conda supports it.
         start = time.time_ns()
@@ -845,7 +845,11 @@ class LabjackReader(object):
             # Count the skipped samples which are indicated by -9999 values
             # Missed samples occur after a device's stream buffer overflows
             # and are reported after auto-recover mode ends.
-            curr_skip = curr_data.count(-9999.0)
+            curr_skip = 0
+            for value in curr_data:
+                if value == -9999.0:
+                    curr_skip += 1
+
             total_skip += curr_skip
 
             ainStr = ""
