@@ -87,7 +87,20 @@ class LabjackReader(object):
 
         self.connection_open = False
 
+        # For administrative purposes, we will also keep track of the
+        # self-reported metadata of this device.
+        self.meta_device = ctypes.c_int32(0)
+        self.meta_connection = ctypes.c_int32(0)
+        self.meta_serial_number = ctypes.c_int32(0)
+        self.meta_ip_addr = ctypes.c_int32(0)
+        self.meta_port = ctypes.c_int32(0)
+        self.meta_max_packet_size = ctypes.c_int32(0)
+
     def __str__(self):
+        return self.__repr__() + " Max packet size in bytes: %i" \
+               % (self.meta_max_packet_size.value)
+    
+    def __repr__(self):
         # Make sure we have a connection open.
         if not self.connection_open:
             # Open our device.
@@ -95,32 +108,34 @@ class LabjackReader(object):
                                     self.id)
             self.connection_open = True
 
-        # Query for data
-        device = ctypes.c_int32(0)
-        connection = ctypes.c_int32(0)
-        serial_number = ctypes.c_int32(0)
-        ip_addr = ctypes.c_int32(0)
-        port = ctypes.c_int32(0)
-        max_packet_size = ctypes.c_int32(0)
+        # If we don't have enough metadata abut this device, get it.
+        if not (self.meta_device and self.meta_connection
+                and self.meta_serial_number
+                and self.meta_ip_addr
+                and self.meta_port
+                and self.meta_max_packet_size):
 
-        error = ljm_staticlib.LJM_GetHandleInfo(self.handle,
-                                                ctypes.byref(device),
-                                                ctypes.byref(connection),
-                                                ctypes.byref(serial_number),
-                                                ctypes.byref(ip_addr),
-                                                ctypes.byref(port),
-                                                ctypes.byref(max_packet_size))
-        if error != ljm_errorcodes.NOERROR:
-            raise ljm.ljm.LJMError(error)
+            error = ljm_staticlib.LJM_GetHandleInfo(self.handle,
+                                                    ctypes.byref(self.meta_device),
+                                                    ctypes.byref(self.meta_connection),
+                                                    ctypes.byref(self.meta_serial_number),
+                                                    ctypes.byref(self.meta_ip_addr),
+                                                    ctypes.byref(self.meta_port),
+                                                    ctypes.byref(self.meta_max_packet_size))
+            if error != ljm_errorcodes.NOERROR:
+                raise ljm.ljm.LJMError(error)
 
-        return "LabJack %s.\n" \
-               "Connection type: %s, Serial number: %i,\n" \
-               "IP address: %s, Port: %i, Max packet size in bytes: %i" \
-               % ("T7" if device.value == ljm_constants.dtT7 else ("T4" if device.value == ljm_constants.dtT4 else "Other"),
-                  "USB" if connection.value == ljm_constants.ctUSB else ("WIFI" if connection.value == ljm_constants.ctWIFI else ("Ethernet" if connection.value == ljm_constants.ctETHERNET else ("Other"))),
-                  serial_number.value,
-                  ljm.numberToIP(ip_addr.value), port.value,
-                  max_packet_size.value)
+        # In all cases, return a string representation of ourselves.
+        device_name = "T7" if self.meta_device.value == ljm_constants.dtT7 else \
+                      "T4" if self.meta_device.value == ljm_constants.dtT4 else \
+                      "Other"
+        connection_name = "USB" if self.meta_connection.value == ljm_constants.ctUSB else \
+                          "WIFI" if self.meta_connection.value == ljm_constants.ctWIFI else \
+                          "Ethernet" if self.meta_connection.value == ljm_constants.ctETHERNET \
+                          else "Other"
+        return "LabjackReader('Type': %s, Connection': %s, 'Serial': %i, 'IP': %s, 'Port': %i)" \
+                % (device_name, connection_name, self.meta_serial_number.value,
+                   ljm.numberToIP(self.meta_ip_addr.value), self.meta_port.value)
 
     def _stream_read(self, recover_mode=True):
         """Returns data from an initialized and running LabJack device.
@@ -591,7 +606,7 @@ class LabjackReader(object):
                 try:
                     # Open a connection.
                     self._open_connection(verbose=False)
-                    print("Trying to connect at %d Hz, %d" % (med_rate, start_sample_rate), end='')
+                    #print("Trying to connect at %d Hz, %d" % (med_rate, start_sample_rate), end='')
                     scan_rate, sample_rate = self._setup(inputs,
                                                         inputs_max_voltages,
                                                         stream_setting,
@@ -599,7 +614,7 @@ class LabjackReader(object):
                                                         med_rate,
                                                         sample_rate=start_sample_rate)
                 except:
-                    print(Fore.RED + "...failed." + Fore.RESET)
+                    #print(Fore.RED + "...failed." + Fore.RESET)
                     if start_sample_rate < med_rate:
                         # First, try increasing the number of elements per packet.
                         start_sample_rate = min(2 * start_sample_rate, med_rate)
@@ -618,7 +633,7 @@ class LabjackReader(object):
                     opened = True
                     print_packet_size = start_sample_rate
                     print_frequency = med_rate
-                    print(Fore.GREEN + "...opened." + Fore.RESET)
+                    #print(Fore.GREEN + "...opened." + Fore.RESET)
 
             iterations = 0
             buffer_size = 0
