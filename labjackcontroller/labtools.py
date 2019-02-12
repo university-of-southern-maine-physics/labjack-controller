@@ -244,72 +244,6 @@ class LabjackReader(object):
         else:
             return -1
 
-    def save_data(self, filename: str, row_start: int, row_end: int, mode='w',
-                  header=False) -> int:
-        """
-        Write recorded data points to a file named filename.
-
-        Parameters
-        ----------
-        filename : str
-            A filename, such as "xyz.txt", that specifies this file.
-        row_start : The data point across all channels to start from.
-                    0 is the very first one ever recorded.
-        row_end : The last data point to include (eg. 10th).
-                  If a value greater than the number of rows present
-                  is given, only the rows present will be backed up
-                  and no error will be thrown.
-        mode : {'r+', 'w', 'w+', or 'a'}, optional
-            Valid options are
-            'r+' for reading and writing, without file truncation
-            'w' for writing
-            'w+' for reading and writing, with file truncation
-            'a' for append mode
-        header : A column header for each of the channels being read
-
-        Returns
-        -------
-        num_rows : the number of rows actually written
-
-        """
-        if not len(self.input_channels):
-            return -1
-        if mode not in ['r+', 'w', 'w+', 'a']:
-            raise Exception("Invalid file write mode specified.")
-        if not isinstance(filename, str) or not len(filename):
-            raise Exception("Bad filename given.")
-
-        """
-        with open(filename, mode) as f:
-            # Write header.
-            if header:
-                f.write(" ".join(self.input_channels) + ' time\n')
-
-            if self.data_arr is None or not len(self.data_arr):
-                return 0
-
-            # Reshape the data into rows, where every row is a moment in time
-            # where all channels were sampled at once.
-            curr_queue = self._reshape_data(row_start, row_end)
-
-            if curr_queue is not None:
-                # Write data.
-                for signal in curr_queue:
-                    f.write(" ".join([str(item) for item in signal]) + '\n')
-                return len(curr_queue)
-            return 0
-        """
-        if header:
-            with open(filename, mode) as f:
-                f.write(",".join(self.input_channels) + ',time,system-time\n')
-        else:
-            with open(filename, 'ab') as f:
-                curr_data = self._reshape_data(row_start, row_end)
-                if curr_data is not None:
-                    np.savetxt(f, self._reshape_data(row_start, row_end), delimiter=',')
-                    return len(curr_data)
-        return 0
-
     def _reshape_data(self, from_row: int, to_row: int):
         """
         Get a range of rows from the recorded data
@@ -340,21 +274,60 @@ class LabjackReader(object):
         # Else...
         return None
 
-    def get_data(self, num_rows) -> Union[List[List[float]], None]:
+    def to_list(self, mode="all", **kwargs) -> Union[List[List[float]], None]:
         """
         Return data in latest array.
 
         Parameters
         ----------
-        num_rows : int, optional
-            The number of rows to return. Number is relative to the end,
-            or -1 for all rows.
+        mode: str, optional
+            Valid options are
+            'all': Get all data.
+            'relative': Expects you to use the kwarg num_rows=n, with n as the
+                        number of rows to retrieve relative to the end.
+            'range': Retrieves a range of rows. Expects the kwargs 'start' and 'end'.
 
         Returns
         -------
         array_like: ndarray
             A 2D array in the shape (ceil(1d data len/ number of channels),
                                      number of channels)
+
+        Examples
+        --------
+        Create a reader for a Labjack T7 and read off 60.5 seconds of data at
+        50 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
+        each. 
+
+        >>> reader = LabjackReader("T7")
+        >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
+        >>> # Return all the data we collected.
+        >>> reader.to_list(mode='all')
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
+        >>> # Return the last 50 rows of data we collected.
+        >>> reader.to_list(mode='relative', num_rows=50)
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
+        >>> # Return rows 17 through 65, inclusive, of the data we've collected.
+        >>> reader.to_list(mode='range', start=17, end=65)
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
 
         Notes
         -----
@@ -368,20 +341,38 @@ class LabjackReader(object):
         row_width = len(self.input_channels) + 2
         max_row = int(max_row / row_width)
 
-        if num_rows < -1:
-            raise Exception("Invalid number of rows provided")
-        elif num_rows == -1:
+        if mode == "all" or mode == 'all':
             return self._reshape_data(0, max_row)
-        else:
-            return self._reshape_data(max_row - num_rows, max_row)
+        elif mode == "range" or mode == 'range':
+            if "start" in kwargs and "end" in kwargs: 
+                from_range, to_range = kwargs["start"], kwargs["end"]
+                if 0 <= from_range < to_range:
+                    return self._reshape_data(from_range, to_range)
+                else:
+                    raise Exception("Invalid range provided of [%d, %d]" % (from_range, to_range))
+            else:
+                raise Exception("The kwargs \"start\" and \"end\" must be specified in range mode.")
+        elif mode == "relative" or mode == 'relative':
+            if "num_rows" in kwargs:
+                if kwargs["num_rows"] < 0:
+                    raise Exception("Invalid number of rows provided")
+                else:
+                    return self._reshape_data(max_row - kwargs["num_rows"], max_row)
+            else:
+                raise Exception("Number of rows must be specified in relative mode.")
 
-    def get_dataframe(self):
+    def to_dataframe(self, mode="all", **kwargs):
         """
         Gets this object's recorded data in dataframe form.
 
         Parameters
         ----------
-        None
+        mode: str, optional
+            Valid options are
+            'all': Get all data.
+            'relative': Expects you to use the kwarg num_rows=n, with n as the
+                        number of rows to retrieve relative to the end.
+            'range': Retrieves a range of rows. Expects the kwargs 'start' and 'end'.
 
         Returns
         -------
@@ -399,9 +390,16 @@ class LabjackReader(object):
         If the internal data array has not been initialized yet, behavior
         is undefined.
         """
-        return pd.DataFrame(self.get_data(-1),
-                            columns=self.input_channels + ["Time", "System Time"])
-
+        base_result = pd.DataFrame(self.to_list(mode, **kwargs),
+                                  columns=self.input_channels \
+                                          + ["Time", "System Time"])
+        
+        if mode == "range" or mode == 'range':
+            return base_result.reindex(range(kwargs["start"], kwargs["end"]))
+        elif mode == "relative" or mode == 'relative':
+            return base_result.reindex(range(int(max_row / row_width) - kwargs["num_rows"], int(max_row / row_width)))
+        
+        return base_result
 
     def _open_connection(self, verbose=True):
         """
