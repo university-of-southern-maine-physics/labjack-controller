@@ -264,9 +264,9 @@ class LabjackReader(object):
         if (self.data_arr is not None and self.get_max_data_index() != -1
            and from_row >= 0):
             row_width = len(self.input_channels) + 2
-            max_index = min(self.get_max_data_index(), row_width*to_row)
+            max_index = min(self.get_max_data_index(), row_width * to_row)
 
-            start_index = from_row*row_width
+            start_index = from_row * row_width
 
             return np.array(self.data_arr[start_index:max_index]) \
                 .reshape((ceil((max_index - start_index) / row_width),
@@ -290,14 +290,16 @@ class LabjackReader(object):
         Returns
         -------
         array_like: ndarray
-            A 2D array in the shape (ceil(1d data len/ number of channels),
-                                     number of channels)
+            A 2D array in the shape (ceil(1d data len/ (number of channels + 2),
+                                     number of channels + 2)
+            Final two columns are the LabJack device's time in nanoseconds, and
+            the host system's time, also in nanoseconds.
 
         Examples
         --------
         Create a reader for a Labjack T7 and read off 60.5 seconds of data at
         50 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
-        each. 
+        each.
 
         >>> reader = LabjackReader("T7")
         >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
@@ -344,7 +346,7 @@ class LabjackReader(object):
         if mode == "all" or mode == 'all':
             return self._reshape_data(0, max_row)
         elif mode == "range" or mode == 'range':
-            if "start" in kwargs and "end" in kwargs: 
+            if "start" in kwargs and "end" in kwargs:
                 from_range, to_range = kwargs["start"], kwargs["end"]
                 if 0 <= from_range < to_range:
                     return self._reshape_data(from_range, to_range)
@@ -380,7 +382,7 @@ class LabjackReader(object):
             A Pandas Dataframe with the following columns:
             AINB....AINC: Voltage values for the user-specified channels
                           AIN #B to #C.
-            Time:  Recorded time (in seconds) of datapoints in row, as
+            Time:  Recorded time (in nanoseconds) of datapoints in row, as
                    observed by the LabJack
             System Time: Recorded time (in nanoseconds) of datapoints in
                          row, as observed by the host computer
@@ -390,16 +392,10 @@ class LabjackReader(object):
         If the internal data array has not been initialized yet, behavior
         is undefined.
         """
-        base_result = pd.DataFrame(self.to_list(mode, **kwargs),
-                                  columns=self.input_channels \
-                                          + ["Time", "System Time"])
-        
-        if mode == "range" or mode == 'range':
-            return base_result.reindex(range(kwargs["start"], kwargs["end"]))
-        elif mode == "relative" or mode == 'relative':
-            return base_result.reindex(range(int(max_row / row_width) - kwargs["num_rows"], int(max_row / row_width)))
-        
-        return base_result
+
+        return pd.DataFrame(self.to_list(mode, **kwargs),
+                            columns=self.input_channels \
+                             + ["Time", "System Time"])
 
     def _open_connection(self, verbose=True):
         """
@@ -529,7 +525,9 @@ class LabjackReader(object):
                   inputs_max_voltages: List[float],
                   stream_setting=0,
                   resolution=0,
-                  verbose=True):
+                  verbose=True,
+                  max_buffer_size=0,
+                  num_seconds=45):
         """
         Determine the maximum frequency and number of elements per packet this
         device can sample at without overflowing any buffers.
@@ -548,6 +546,8 @@ class LabjackReader(object):
             See official LabJack documentation.
         verbose : str, optional
             If enabled, will print out statistics about each read.
+        num_seconds : int, optional
+            The amount of time to test a given configuration.
 
         Returns
         -------
@@ -560,7 +560,7 @@ class LabjackReader(object):
 
         Examples
         --------
-        Find out the maximum (Hz, items/packet) an arbitrary LabJack T7 can
+        Find out the maximum (Hz, scans/packet) an arbitrary LabJack T7 can
         read from the channels AIN0, AIN1 each having a maximum voltage of
         10V.
 
@@ -576,9 +576,8 @@ class LabjackReader(object):
         self._close_stream()
 
 
-        MAX_BUFFERSIZE = 1
-        MAX_LJM_BUFFERSIZE = 1
-        NUM_SECONDS = 45
+        MAX_BUFFERSIZE = 0
+        MAX_LJM_BUFFERSIZE = 0
         min_rate = 0
         med_rate = 100
         max_rate = 0
@@ -642,16 +641,20 @@ class LabjackReader(object):
             start = time.time()
 
             try:
-                while time.time() - start < NUM_SECONDS:
+                while time.time() - start < num_seconds:
                     # Read all rows of data off of the latest packet in the stream.
                     ret = self._stream_read()#ljm.eStreamRead(self.handle)
                     buffer_size = ret[1]
                     ljm_buffer_size = max(ljm_buffer_size, ret[2])
-                    num_skips = ret[0].count(-9999.0)
+
+                    for element in ret[0]:
+                        if element == -9999.0:
+                            num_skips += 1
+
                     max_buffer_size = max(max_buffer_size, buffer_size)
                     iterations += len(ret[0])
 
-                    if buffer_size >= MAX_BUFFERSIZE or num_skips or ljm_buffer_size >= MAX_LJM_BUFFERSIZE:
+                    if buffer_size > MAX_BUFFERSIZE or num_skips or ljm_buffer_size > MAX_LJM_BUFFERSIZE:
                         if start_sample_rate < med_rate:
                             # First, try increasing the number of elements per packet.
                             start_sample_rate = min(2 * start_sample_rate, med_rate)
@@ -683,9 +686,9 @@ class LabjackReader(object):
                     exponential_mode = False
                     break
             else:
-                if (buffer_size < MAX_BUFFERSIZE
+                if (buffer_size <= MAX_BUFFERSIZE
                     and not num_skips
-                    and ljm_buffer_size < MAX_LJM_BUFFERSIZE):
+                    and ljm_buffer_size <= MAX_LJM_BUFFERSIZE):
                     # Store these working values
                     last_good_rate = med_rate
                     last_good_sample = start_sample_rate
@@ -709,11 +712,21 @@ class LabjackReader(object):
             finally:
                 self._close_stream()
                 if verbose:
-                    print(Fore.GREEN + "[PASS]" if valid_config else Fore.RED + "[FAIL]",
-                          Fore.RESET + "Finished a stream with an effective scan rate of %5.0f Hz @ %5d points / packet; "
-                          "buffer had at most %s%3d%s items remaining. Frequency search range is now [%5d, %5d]." % (scan_rate, print_packet_size, (Fore.RED if max_buffer_size >= MAX_BUFFERSIZE else Fore.RESET), max_buffer_size, Fore.RESET, min_rate, max_rate),
-                          "There were " + (Fore.RED if num_skips else Fore.RESET) + str(num_skips) + Fore.RESET + " skips."
-                          + " LJM max size was %d" % ljm_buffer_size)
+                    print(Fore.GREEN
+                          + "[PASS]" if valid_config else Fore.RED + "[FAIL]",
+                          Fore.RESET
+                          + "Finished a stream with an effective scan rate of"
+                          " %5.0f Hz @ %5d scans / packet; buffer had at most"
+                          " %s%3d%s items remaining. Frequency search range is"
+                          " now [%5d, %5d]." \
+                          % (scan_rate, print_packet_size,
+                             (Fore.RED if max_buffer_size > MAX_BUFFERSIZE else Fore.RESET),
+                             max_buffer_size, Fore.RESET, min_rate, max_rate),
+                          "There were "
+                          + (Fore.RED if num_skips else Fore.RESET) + str(num_skips) + Fore.RESET + " skips."
+                          + " LJM max size was %s%d%s" %
+                          ((Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET),
+                           ljm_buffer_size, Fore.RESET))
 
 
     def collect_data(self,
@@ -784,12 +797,18 @@ class LabjackReader(object):
 
         num_addrs = len(inputs)
 
+        # Create a RawArray for multiple processes; this array
+        # stores our data.
+        size = int(seconds * scan_rate * (len(inputs) + 2))
+
         scan_rate, sample_rate = self._setup(inputs, inputs_max_voltages,
                                              stream_setting, resolution,
                                              scan_rate,
                                              sample_rate=sample_rate)
 
-        print("\nStream started with a scan rate of %0.0f Hz." % scan_rate)
+        if verbose:
+            print("[%26s] %15s / %15s %5s  %15s %15s" % ("Time", "Max Index", "Total Indices", "%", "Scans on Device", "Scans on LJM"))
+
 
         self.input_channels = inputs
 
@@ -798,10 +817,6 @@ class LabjackReader(object):
         packet_num = 0
         self.max_index = 0
         step_size = len(inputs)
-
-        # Create a RawArray for multiple processes; this array
-        # stores our data.
-        size = int(seconds * scan_rate * (len(inputs) + 2))
 
         self.data_arr = (ctypes.c_double * size)(size)
 
@@ -813,7 +828,7 @@ class LabjackReader(object):
             curr_data = ret[0]
 
             if verbose:
-                print("[%s] (%d/%d) (%d) (%d) There are %d scans left on the device buffer and %d scans left in the LJM's buffer" % (datetime.datetime.now(), self.max_index, size, size - self.max_index, len(curr_data), ret[1], ret[2]))
+                print("[%26s] %15d / %15d %4.1d%% %15d %15d" % (datetime.datetime.now(), self.max_index, size, ((float(self.max_index) / float(size)) * 100 if self.max_index else 0), ret[1], ret[2]))
 
             # Ensure that this packet won't overflow our buffer.
             if self.max_index + ((len(curr_data) / step_size) * (2 + step_size)) > size:
@@ -835,7 +850,7 @@ class LabjackReader(object):
                 # Put in the time as well
                 self.data_arr[self.max_index] = curr_time
                 self.max_index += 1
-                self.data_arr[self.max_index] = time.time_ns() - start
+                self.data_arr[self.max_index] = (time.time_ns() - start) / 1e9
                 self.max_index += 1
 
             packet_num += 1
@@ -857,9 +872,9 @@ class LabjackReader(object):
                 print("Scans Skipped = %0.0f" % (curr_skip/num_addrs))
 
         # We are done, record the actual ending time.
-        end = time.time_ns()
+        end = time.time_ns() / 1e9
 
-        tt = end - start
+        total_time = end - start
         if verbose:
             print("\nTotal scans = %i\
                    \nTime taken = %f seconds\
@@ -867,11 +882,12 @@ class LabjackReader(object):
                    \nTimed Scan Rate = %f scans/second\
                    \nTimed Sample Rate = %f samples/second\
                    \nSkipped scans = %0.0f"
-                  % (self.max_index, tt, scan_rate, (self.max_index / tt),
-                     (self.max_index * num_addrs / tt),
+                  % (self.max_index, total_time, scan_rate,
+                     (self.max_index / total_time),
+                     (self.max_index * num_addrs / total_time),
                      (total_skip / num_addrs)))
 
         # Close the connection.
         self._close_stream()
 
-        return tt, (total_skip / num_addrs)
+        return total_time, (total_skip / num_addrs)
