@@ -10,7 +10,6 @@ from math import ceil
 import time
 import datetime
 import ctypes
-from multiprocessing import RawArray
 from colorama import init, Fore
 init()
 
@@ -75,8 +74,8 @@ class LabjackReader(object):
         self.input_channels: List[str]
         self.input_channels = []
 
-        # Declare a data storage handle
-        self.data_arr: RawArray
+        # Declare a data storage handle, is a ctypes.c_int with some number (in other words, is a C array)
+        self.data_arr: ctypes.c_int
         self.data_arr = None
 
         # Also, specify the largest index that is populated.
@@ -496,11 +495,12 @@ class LabjackReader(object):
         # for individual analog inputs, but the stream has only one
         # settling time and resolution.
 
-        # Ensure triggered stream is disabled.
-#        ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
+        if self.type == "T7":
+            # Ensure triggered stream is disabled.
+            ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
 
-        # Enabling internally-clocked stream.
-#        ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+            # Enabling internally-clocked stream.
+            ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
 
         # All negative channels are single-ended, AIN0 and AIN1 ranges are
         # +/-10 V, stream settling is 0 (default) and stream resolution
@@ -573,6 +573,7 @@ class LabjackReader(object):
 
         """
 
+        # Close any existing streams.
         self._close_stream()
 
 
@@ -585,10 +586,13 @@ class LabjackReader(object):
         exponential_mode = True
 
         # The number of elements we get back in a packet.
-        start_sample_rate = 1
+        scans_per_packet = 1
 
         last_good_rate = -1
-        last_good_sample = -1
+        last_good_scan_per_packet = -1
+
+        last_attempted_rate = -1
+        last_attempted_sample = -1
 
         while(1):
             # First, try to start at the rate specified.
@@ -603,34 +607,53 @@ class LabjackReader(object):
                 try:
                     # Open a connection.
                     self._open_connection(verbose=False)
-                    #print("Trying to connect at %d Hz, %d" % (med_rate, start_sample_rate), end='')
                     scan_rate, sample_rate = self._setup(inputs,
                                                         inputs_max_voltages,
                                                         stream_setting,
                                                         resolution,
                                                         med_rate,
-                                                        sample_rate=start_sample_rate)
+                                                        sample_rate=scans_per_packet)
                 except:
-                    #print(Fore.RED + "...failed." + Fore.RESET)
-                    if start_sample_rate < med_rate:
+                    if scans_per_packet < med_rate:
                         # First, try increasing the number of elements per packet.
-                        start_sample_rate = min(2 * start_sample_rate, med_rate)
+                        scans_per_packet = min(2 * scans_per_packet, med_rate)
                     else:
                         # Step down, and turn off exponential mode
                         exponential_mode = False
-                        start_sample_rate = 1
+                        scans_per_packet = last_good_scan_per_packet
                         max_rate = med_rate
                         med_rate = (min_rate + med_rate) / 2
 
                         if (int(med_rate) == int(min_rate)
                         or int(med_rate) == int(max_rate)):
                             self._close_stream()
-                            return last_good_rate - (last_good_rate % 100), last_good_sample
+                            return last_good_rate - (last_good_rate % 100), last_good_scan_per_packet
                 else:
                     opened = True
-                    print_packet_size = start_sample_rate
+                    print_packet_size = scans_per_packet
                     print_frequency = med_rate
-                    #print(Fore.GREEN + "...opened." + Fore.RESET)
+
+            # The below condition could happen when we are in binary search
+            # mode, due to converging bounds.
+            if (last_attempted_rate == med_rate
+                and last_attempted_sample == scans_per_packet
+                and not exponential_mode):
+
+                # In all cases, we need to adjust the bounds of our search,
+                # since we don't want to repeat any test we already did.
+                if (last_attempted_rate == last_good_rate
+                    and last_attempted_sample == last_good_scan_per_packet):
+
+                    min_rate = med_rate
+                else:
+                    max_rate = med_rate
+
+                # In all cases, adjust bounds and start from the top.
+                med_rate = med_rate = (min_rate + max_rate) / 2
+                continue
+
+            last_attempted_rate = med_rate
+            last_attempted_sample = scans_per_packet
 
             iterations = 0
             buffer_size = 0
@@ -655,12 +678,12 @@ class LabjackReader(object):
                     iterations += len(ret[0])
 
                     if buffer_size > MAX_BUFFERSIZE or num_skips or ljm_buffer_size > MAX_LJM_BUFFERSIZE:
-                        if start_sample_rate < med_rate:
+                        if scans_per_packet < med_rate:
                             # First, try increasing the number of elements per packet.
-                            start_sample_rate = min(2 * start_sample_rate, med_rate)
+                            scans_per_packet = min(2 * scans_per_packet, med_rate)
                         else:
                             # Step down, and turn off exponential mode
-                            start_sample_rate = 1
+                            scans_per_packet = 1
                             max_rate = med_rate
                             med_rate = (min_rate + med_rate) / 2
                             exponential_mode = False
@@ -669,18 +692,18 @@ class LabjackReader(object):
                                 or int(med_rate) == int(max_rate)):
                                 # Go to last good and terminate.
                                 self._close_stream()
-                                return last_good_rate - (last_good_rate % 100), last_good_sample
+                                return last_good_rate - (last_good_rate % 100), last_good_scan_per_packet
 
                         # In all cases, try again.
                         break
 
             except ljm.LJMError:
-                if start_sample_rate < med_rate:
+                if scans_per_packet < med_rate:
                     # First, try increasing the number of elements per packet.
-                    start_sample_rate = min(2 * start_sample_rate, med_rate)
+                    scans_per_packet = min(2 * scans_per_packet, med_rate)
                 else:
                     # Step down, and turn off exponential mode
-                    start_sample_rate = 1
+                    scans_per_packet = last_good_scan_per_packet
                     max_rate = med_rate
                     med_rate = (min_rate + med_rate) / 2
                     exponential_mode = False
@@ -691,7 +714,7 @@ class LabjackReader(object):
                     and ljm_buffer_size <= MAX_LJM_BUFFERSIZE):
                     # Store these working values
                     last_good_rate = med_rate
-                    last_good_sample = start_sample_rate
+                    last_good_scan_per_packet = scans_per_packet
                     valid_config = True
 
                     if exponential_mode:
@@ -708,7 +731,7 @@ class LabjackReader(object):
                     if (int(med_rate) == int(min_rate)
                     or int(med_rate) == int(max_rate)):
                         self._close_stream()
-                        return last_good_rate - (last_good_rate % 100), last_good_sample
+                        return last_good_rate - (last_good_rate % 100), last_good_scan_per_packet
             finally:
                 self._close_stream()
                 if verbose:

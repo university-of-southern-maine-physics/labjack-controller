@@ -12,7 +12,7 @@ my_lj = LabjackReader(device_type, connection=connection_type)
 
 print(my_lj)
 
-freq, packet_size = 12000, 16#my_lj.find_max_freq(channels, voltages, num_seconds=20)
+freq, packet_size = my_lj.find_max_freq(channels, voltages, num_seconds=10)
 
 print(freq, packet_size)
 
