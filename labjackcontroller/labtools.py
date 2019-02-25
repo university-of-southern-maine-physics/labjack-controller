@@ -443,6 +443,20 @@ class LabjackReader(object):
                 print("Could not stop stream, possibly because there is no stream running.")
             pass
 
+    def close_connection(self):
+        """
+        Releases a LJM device for use by somebody else.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
+        ljm_staticlib.LJM_Close(self.handle)
+
     def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
                scan_rate, sample_rate=-1) -> Tuple[int, int]:
         """
@@ -575,6 +589,9 @@ class LabjackReader(object):
 
         # Close any existing streams.
         self._close_stream()
+
+        if verbose:
+            print("%s %15s %16s %15s %15s %15s" % ("Success", "Scan Rate (Hz)", "Search Range (Hz)", "Scans on Device", "Scans on LJM", "Skips"))
 
 
         MAX_BUFFERSIZE = 0
@@ -734,23 +751,14 @@ class LabjackReader(object):
                         return last_good_rate - (last_good_rate % 100), last_good_scan_per_packet
             finally:
                 self._close_stream()
-                if verbose:
-                    print(Fore.GREEN
-                          + "[PASS]" if valid_config else Fore.RED + "[FAIL]",
-                          Fore.RESET
-                          + "Finished a stream with an effective scan rate of"
-                          " %5.0f Hz @ %5d scans / packet; buffer had at most"
-                          " %s%3d%s items remaining. Frequency search range is"
-                          " now [%5d, %5d]." \
-                          % (scan_rate, print_packet_size,
-                             (Fore.RED if max_buffer_size > MAX_BUFFERSIZE else Fore.RESET),
-                             max_buffer_size, Fore.RESET, min_rate, max_rate),
-                          "There were "
-                          + (Fore.RED if num_skips else Fore.RESET) + str(num_skips) + Fore.RESET + " skips."
-                          + " LJM max size was %s%d%s" %
-                          ((Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET),
-                           ljm_buffer_size, Fore.RESET))
 
+                if verbose:
+                    print("%s %14d [%7d %7d] %25s %25s %25s" %
+                          ((Fore.GREEN + "[PASS]" if valid_config else Fore.RED + "[FAIL]") + Fore.RESET,
+                           med_rate, min_rate, max_rate,
+                           (Fore.RED if max_buffer_size > MAX_BUFFERSIZE else Fore.RESET) + str(max_buffer_size) + Fore.RESET,
+                           (Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET) + str(ljm_buffer_size) + Fore.RESET,
+                           (Fore.RED if num_skips > 0 else Fore.RESET) + str(num_skips) + Fore.RESET))
 
     def collect_data(self,
                      inputs: List[str],
@@ -811,7 +819,7 @@ class LabjackReader(object):
 
         """
         # Open a connection.
-        self._open_connection()
+        self._open_connection(verbose=verbose)
 
         # Close the stream if it was already open; this is done
         # to prevent unexpected termination from last time messing
