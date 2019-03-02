@@ -3,13 +3,11 @@
 
 ## An Easy Python Wrapper for LJM to Just Take Data Already
 
-This is a package designed to make streaming data from [LabJack](https://labjack.com/) devices easy.
-
+This is a package designed to make streaming data from [LabJack](https://labjack.com/) T-series devices easy.
 ## Device Compatibility
 
 + T7 and T7 Pro
 + T4
-+ Digit-series devices
 
 ## Requirements
 
