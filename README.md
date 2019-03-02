@@ -1,4 +1,5 @@
-# labjack-controller
+<h1 align="center">labjack-controller</h1>
+<p style="text-align:center"><img src=https://labjack.com/sites/default/files/styles/slideshow/public/T7-Pro_engineering_sshow.jpg?itok=82O0k1DV/></p>
 
 ## An Easy Python Wrapper for LJM to Just Take Data Already
 
@@ -16,9 +17,11 @@ This is a package designed to make streaming data from [LabJack](https://labjack
 + [LJM](https://labjack.com/support/software/installers/ljm)
 + [Python for LJM](https://labjack.com/support/software/installers/ljm)
 
-All other requirements will be automatically aqquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
+All other requirements will be automatically acquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
 
 ## Sample Usage
+
+Multiple demonstrations of library functions are located in the `demos` folder. However, getting started with full streaming is as easy as
 
 ```python
 from labjackcontroller.labtools import LabjackReader
@@ -40,3 +43,7 @@ my_data = myLabjack.to_list()
 ## Contributors
 
 + [Ben Montgomery](https://github.com/Nyctanthous)
+
+## Special Thanks
+
++ [Paul Nakroshis](https://github.com/paulnakroshis)
