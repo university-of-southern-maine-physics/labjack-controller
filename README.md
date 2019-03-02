@@ -13,7 +13,7 @@ This is a package designed to make streaming data from [LabJack](https://labjack
 
 ## Requirements
 
-+ Python 3
++ Python 3.7+
 + [LJM](https://labjack.com/support/software/installers/ljm)
 + [Python for LJM](https://labjack.com/support/software/installers/ljm)
 
