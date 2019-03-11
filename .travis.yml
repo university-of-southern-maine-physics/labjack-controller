@@ -7,9 +7,7 @@ python:
 before_install:
   - wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
-  - cd labjack_ljm_software_2018_08_30_x86_64
-  - sudo ./labjack_ljm_installer.run
-  - cd
+  - sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
 
 # command to install dependencies
 install:
