@@ -44,7 +44,7 @@ class TestLJR(unittest.TestCase):
     def test_open(self):
         # Ensures we can perform a meaningless open without
         # throwing anything.
-        self.valid_connection._open_stream()
+        self.valid_connection._open_connection()
 
         # This leaves a connection standing open.
 
@@ -71,19 +71,6 @@ class TestLJR(unittest.TestCase):
 
         # Assert there is no skipping.
         self.assertEqual(self.populate_valid_labjack()[1], 0)
-
-    def test_file_write(self):
-        self.populate_valid_labjack()
-
-        # Our populated LJR should work.
-        self.assertEqual(self.valid_connection.save_data("tmp", 0, 10), 10)
-
-        # There should be no data, so we expect an exception.
-        tmp_ljr = LabjackReader(self.valid_device)
-
-        # Save the first 10 rows. Should return and say it was able to save
-        # "error" rows, or -1
-        self.assertEqual(tmp_ljr.save_data("tmp", 0, 10), -1)
 
     def test_reshaping(self):
         tot_time, num_skips = self.populate_valid_labjack()
