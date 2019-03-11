@@ -8,7 +8,7 @@ voltages = [10.0, 10.0, 10.0, 10.0]
 
 
 # Instantiate a LabjackReader
-my_lj = LabjackReader(device_type, connection=connection_type)
+my_lj = LabjackReader(device_type, connection_type=connection_type)
 
 print(my_lj)
 
