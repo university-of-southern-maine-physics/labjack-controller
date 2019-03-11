@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
 from math import ceil
+import sys
 import time
 import datetime
 import ctypes
@@ -14,23 +15,38 @@ from colorama import init, Fore
 init()
 
 
-T7_TYPE = {"name": "T7",
-           "command_response": {1: {"bits": 16,   "microvolts": 316,   "sample_time_ms": 0.04},
-                                2: {"bits": 16.5, "microvolts": 223,   "sample_time_ms": 0.04},
-                                3: {"bits": 17,   "microvolts": 158,   "sample_time_ms": 0.1},
-                                4: {"bits": 17.5, "microvolts": 112,   "sample_time_ms": 0.1},
-                                5: {"bits": 17.9, "microvolts": 84.6,  "sample_time_ms": 0.2},
-                                6: {"bits": 18.3, "microvolts": 64.1,  "sample_time_ms": 0.3},
-                                7: {"bits": 18.8, "microvolts": 45.3,  "sample_time_ms": 0.6},
-                                8: {"bits": 19.1, "microvolts": 36.8,  "sample_time_ms": 1.1},
-                                9: {"bits": 19.6, "microvolts": 26.0,  "sample_time_ms": 3.5},
-                                10: {"bits": 20.5, "microvolts": 14.0, "sample_time_ms": 13.4},
-                                11: {"bits": 21.3, "microvolts": 8.02, "sample_time_ms": 66.2},
-                                12: {"bits": 21.4, "microvolts": 7.48, "sample_time_ms": 159},
-                               }
-            }
+def time_ns_func():
+    return time.time_ns() / 1e9
+
+time_func = time.time if sys.version_info < (3,7,0) else time_ns_func
+
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
+
+    # Keep track of the input channels we're reading.
+    input_channels: List[str]
+    input_channels = []
+
+    # Declare a data storage handle, is a ctypes.c_int with some number (in other words, is a C array)
+    data_arr: ctypes.c_int
+    data_arr = None
+
+    # Also, specify the largest index that is populated.
+    max_index = 0
+
+    # There will be an int handle for the LabJack device
+    handle: int
+
+    connection_open = False
+
+    # For administrative purposes, we will also keep track of the
+    # self-reported metadata of this device.
+    meta_device = ctypes.c_int32(0)
+    meta_connection = ctypes.c_int32(0)
+    meta_serial_number = ctypes.c_int32(0)
+    meta_ip_addr = ctypes.c_int32(0)
+    meta_port = ctypes.c_int32(0)
+    meta_max_packet_size = ctypes.c_int32(0)
 
     def __init__(self,
                  device_type: str,
@@ -69,31 +85,6 @@ class LabjackReader(object):
 
         self.type, self.connection = device_type, connection
         self.id = identifier
-
-        # Keep track of the input channels we're reading.
-        self.input_channels: List[str]
-        self.input_channels = []
-
-        # Declare a data storage handle, is a ctypes.c_int with some number (in other words, is a C array)
-        self.data_arr: ctypes.c_int
-        self.data_arr = None
-
-        # Also, specify the largest index that is populated.
-        self.max_index = 0
-
-        # There will be an int handle for the LabJack device
-        self.handle: int
-
-        self.connection_open = False
-
-        # For administrative purposes, we will also keep track of the
-        # self-reported metadata of this device.
-        self.meta_device = ctypes.c_int32(0)
-        self.meta_connection = ctypes.c_int32(0)
-        self.meta_serial_number = ctypes.c_int32(0)
-        self.meta_ip_addr = ctypes.c_int32(0)
-        self.meta_port = ctypes.c_int32(0)
-        self.meta_max_packet_size = ctypes.c_int32(0)
 
     def __str__(self):
         return self.__repr__() + " Max packet size in bytes: %i" \
@@ -616,10 +607,6 @@ class LabjackReader(object):
             opened = False
             valid_config = False
 
-            # Variables that are only there to show initial state for logging purposes
-            print_packet_size = 0
-            print_frequency = 0
-
             while not opened:
                 try:
                     # Open a connection.
@@ -851,8 +838,7 @@ class LabjackReader(object):
 
         self.data_arr = (ctypes.c_double * size)(size)
 
-        # Python 3.7 has time_ns, upgrade to this when Conda supports it.
-        start = time.time_ns()
+        start = time_func()
         while self.max_index < size:
             # Read all rows of data off of the latest packet in the stream.
             ret = self._stream_read() #ljm.eStreamRead(self.handle)
@@ -881,7 +867,7 @@ class LabjackReader(object):
                 # Put in the time as well
                 self.data_arr[self.max_index] = curr_time
                 self.max_index += 1
-                self.data_arr[self.max_index] = (time.time_ns() - start) / 1e9
+                self.data_arr[self.max_index] = time_func() - start
                 self.max_index += 1
 
             packet_num += 1
@@ -903,7 +889,7 @@ class LabjackReader(object):
                 print("Scans Skipped = %0.0f" % (curr_skip/num_addrs))
 
         # We are done, record the actual ending time.
-        end = time.time_ns() / 1e9
+        end = time_func()
 
         total_time = end - start
         if verbose:
