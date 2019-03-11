@@ -9,6 +9,7 @@ before_install:
   - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - cd labjack_ljm_software_2018_08_30_x86_64
   - sudo ./labjack_ljm_installer.run
+  - cd
 
 # command to install dependencies
 install:
