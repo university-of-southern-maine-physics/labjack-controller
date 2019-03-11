@@ -15,6 +15,8 @@ setup(name='labjackcontroller',
       ],
       install_requires=[
                         'typing',
-                        'numpy'
+                        'numpy',
+                        'pandas',
+                        'colorama'
                        ],
       zip_safe=False)
