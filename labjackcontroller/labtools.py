@@ -22,6 +22,72 @@ def time_ns_func():
 time_func = time.time if sys.version_info < (3, 7, 0) else time_ns_func
 
 
+class Singleton(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls) \
+                .__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class LJMLibrary(metaclass=Singleton):
+    def modify_settings(self, **kwargs):
+        """
+        Based on the LJM function writeLibraryConfigS. Writes a configuration
+        value to the Labjack library itself.
+
+        Parameters
+        ----------
+        **kwargs
+            A LJM library setting. Is from the following:
+            ensure_updated: bool
+                Whether or not the LJM will check if the current Labjack
+                device is using the latest firmware.
+            multiple_feedbacks: bool
+                Whether or not the LJM will send multiple packets when the
+                desired operation would exceed the maximum size of one packet.
+            retry_on_transaction_err: bool
+                Whether or not LJM automatically retries an operation if a
+                LJME_TRANSACTION_ID_ERR occurs.
+            stream_timeout: float
+                How long in MS the LJM waits for a packet to be sent or
+                received.
+
+        Returns
+        -------
+        None
+
+        """
+        setting = ""
+        value = -1
+
+        for kwarg in kwargs:
+            # Handle simple boolean settings first.
+            setting = (b'LJM_ALLOWS_AUTO_MULTIPLE_FEEDBACKS' if kwarg is "multiple_feedbacks" else
+                       b'LJM_OLD_FIRMWARE_CHECK' if kwarg is "ensure_updated" else
+                       b'LJM_RETRY_ON_TRANSACTION_ID_MISMATCH' if kwarg is "retry_on_transaction_err" else
+                       "")
+#                    "LJM_SEND_RECEIVE_TIMEOUT_MS" \
+#                    if kwarg is "communication_timeout" else ""
+
+            if setting:
+                value = ctypes.c_double(1) if kwargs[kwarg] \
+                    else ctypes.c_double(0)
+                try:
+                    error = ljm_staticlib.LJM_WriteLibraryConfigS(setting,
+                                                                  value)
+                except Exception as e:
+                    print("Unexpected error writing to LJM library" + e)
+                if error != ljm_errorcodes.NOERROR:
+                    raise LJMError(error)
+                continue
+
+
+ljm_reference = LJMLibrary()
+
+
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
@@ -140,6 +206,152 @@ class LabjackReader(object):
             " 'IP': %s, 'Port': %i)" \
             % (device_name, connection_name, self.meta_serial_number.value,
                ljm.numberToIP(self.meta_ip_addr.value), self.meta_port.value)
+
+    def modify_settings(self, **kwargs):
+        """
+        Based on the LJM function eWriteName. Writes a configuration value to
+        our Labjack device.
+
+        Parameters
+        ----------
+        **kwargs
+            A device setting. Is from the following:
+            ain_on: bool
+                Set to True if you want the AIN analog inputs to be avalible,
+                else set to False. Setting is T7-specific, will be ignored on
+                other devices.
+            ain_on_default: bool
+                Set to True if you want the AIN analog inputs to be avalible
+                by default, else set to False. Setting is T7-specific, will
+                be ignored on other devices.
+            ethernet_on: bool
+                Set to True if you want the device to have Ethernet avalible,
+                else set to False.
+            ethernet_ip_default: str
+                A string representing the IP address this device should use
+                by default when connecting by Ethernet.
+            ethernet_subnet_default: str
+                A string representing the subnet this device should use
+                by default when connecting by Ethernet.
+            ethernet_on_default: bool
+                Set to True if you want the device to have Ethernet avalible
+                by default, else set to False.
+            led_on: bool
+                Set to True if you want the LED to be on/blinking,
+                else set to False.
+            led_on_default: bool
+                Set to True if you want the LED to be on/blinking by default,
+                else set to False.
+            stream_clock: str
+                T7 Only. Controls which clock source will be used to run the
+                main stream clock. Rising edges will increment a counter and
+                trigger a stream scan after the number of edges specified
+                in the setting stream_clock_divisor. Is one of the following:
+                "internal": Use the internal crystal to clock the stream.
+                "external": Use an external clock plugged into CIO3.
+            stream_clock_divisor: int
+                Not Implemented
+            triggered_stream: str
+                T7 Only. Set to None if you don't want to start the stream
+                when an input is given to one of the FIO0 or FIO1 inputs.
+                Else, set to one of the following channels to listen on:
+                DIO_EF0
+                DIO_EF1
+                DIO_EF2
+                DIO_EF3
+                DIO_EF6
+                DIO_EF7
+            wifi_on: bool
+                Set to True if you want the device to have WIFI avalible,
+                else set to False.
+            wifi_on_default: bool
+                Set to True if you want the device to have WIFI avalible by
+                default, else set to False.
+            wifi_ip_default: str
+                Not Implemented
+
+
+        Returns
+        -------
+        None
+        """
+
+        # NOTE: WIFI SETTINGS NEED TO BE SET AND THEN APPLIED WITH
+        # WIFI_APPLY_SETTINGS!
+
+        setting = ""
+        value = -1
+
+        for kwarg in kwargs:
+            # Handle boolean settings first.
+            setting = (b'POWER_AIN' if kwarg is "ain_on" else
+                        b'POWER_AIN_DEFAULT' if kwarg is "ain_on_default" else
+                        b'POWER_ETHERNET' if kwarg is "ethernet_on" else
+                        b'POWER_ETHERNET_DEFAULT' if kwarg is "ethernet_on_default" else
+                        b'POWER_LED' if kwarg is "led_on" else
+                        b'POWER_LED_DEFAULT' if kwarg is "led_on_default" else
+                        b'POWER_WIFI' if kwarg is "wifi_on" else
+                        b'POWER_WIFI_DEFAULT' if kwarg is "wifi_on_default" else
+                        "")
+
+            if setting:
+                value = ctypes.c_double(1) if kwargs[setting] \
+                    else ctypes.c_double(0)
+                error = ljm_staticlib.LJM_eWriteName(self.handle,
+                                                        setting,
+                                                        value)
+                if error != ljm_errorcodes.NOERROR:
+                    raise LJMError(error)
+                continue
+
+            # Now, handle more complex operations.
+            if kwarg is "triggered_stream":
+                if kwargs[kwarg] is None:
+                    error = ljm_staticlib \
+                        .LJM_eWriteName(self.handle,
+                                        b'STREAM_TRIGGER_INDEX',
+                                        ctypes.c_double(0))
+                elif isinstance(kwargs[kwarg], str):
+                    value = (2000 if kwargs[kwarg] is "DIO_EF0" else
+                                2001 if kwargs[kwarg] is "DIO_EF1" else
+                                2002 if kwargs[kwarg] is "DIO_EF2" else
+                                2003 if kwargs[kwarg] is "DIO_EF3" else
+                                2004 if kwargs[kwarg] is "DIO_EF4" else
+                                2005 if kwargs[kwarg] is "DIO_EF5" else
+                                2006 if kwargs[kwarg] is "DIO_EF6" else
+                                2007 if kwargs[kwarg] is "DIO_EF7" else
+                                0)
+                    if value:
+                        # Write the corresponding value.
+                        error = ljm_staticlib \
+                            .LJM_eWriteName(self.handle,
+                                            b'STREAM_TRIGGER_INDEX',
+                                            ctypes.c_double(value))
+                        # TODO: LJM_STREAM_SCANS_RETURN_ALL? See
+                        # https://labjack.com/support/software/api/ljm/function-reference/ljmestreamstart#triggered
+                    else:
+                        raise ValueError("Expected an argument in the range"
+                                            "DIO_EF0....DIO_EF7")
+                else:
+                    raise TypeError("Invalid argument. Expected a string"
+                                    "in the range DIO_EF0....DIO_EF7")
+            elif kwarg is "stream_clock":
+                value = (0 if kwargs[kwarg] is "internal" else
+                            2 if kwargs[kwarg] is "external" else
+                            -1)
+                if value == -1:
+                    raise ValueError("Expected an argument that was either"
+                                        "\"internal\" or \"external\"")
+                else:
+                    error = ljm_staticlib \
+                            .LJM_eWriteName(self.handle,
+                                            b'STREAM_CLOCK_SOURCE',
+                                            ctypes.c_double(value))
+
+            # Finally, ensure we didn't get any errors trying to set our
+            # configuration.
+            if error != ljm_errorcodes.NOERROR:
+                raise LJMError(error)
 
     def _stream_read(self, recover_mode=True):
         """Returns data from an initialized and running LabJack device.
@@ -524,8 +736,8 @@ class LabjackReader(object):
         # Declare the ports we want to read, EG. AIN0 & AIN1
         scan_list = ljm.namesToAddresses(num_addresses, inputs)[0]
 
-        # If a packet is lost, configure the device to try and get it again.
-        ljm.writeLibraryConfigS("LJM_RETRY_ON_TRANSACTION_ID_MISMATCH", 0)
+        # If a packet is lost, don't try and get it again.
+        ljm_reference.modify_settings(retry_on_transaction_err=False)
 
         # When streaming, negative channels and ranges can be configured
         # for individual analog inputs, but the stream has only one
@@ -533,10 +745,10 @@ class LabjackReader(object):
 
         if self.type == "T7":
             # Ensure triggered stream is disabled.
-            ljm.eWriteName(self.handle, "STREAM_TRIGGER_INDEX", 0)
+            self.modify_settings(triggered_stream=None)
 
             # Enabling internally-clocked stream.
-            ljm.eWriteName(self.handle, "STREAM_CLOCK_SOURCE", 0)
+            self.modify_settings(stream_clock="internal")
 
         # All negative channels are single-ended, AIN0 and AIN1 ranges are
         # +/-10 V, stream settling is 0 (default) and stream resolution
