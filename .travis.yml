@@ -10,11 +10,12 @@ before_install:
   - sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
   - wget https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
   - unzip Python_LJM_2018_10_19.zip
-  - sudo python Python_LJM_2018_10_19/setup.py install
+  - cd Python_LJM_2018_10_19
+  - sudo python setup.py install
 
 # command to install dependencies
 install:
-  - python setup.py -q install
+  - sudo python setup.py -q install
 # command to run tests
-#script:
-#  - labjackcontroller/lab_unittests.py
+script:
+  - labjackcontroller/lab_unittests.py
