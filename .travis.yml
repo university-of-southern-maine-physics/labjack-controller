@@ -5,19 +5,18 @@ python:
 
 # Get base LJM/Kipling setup
 before_install:
-  - pip install setuptools
   - wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
   - wget https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
   - unzip Python_LJM_2018_10_19.zip
   - cd Python_LJM_2018_10_19
-  - sudo python setup.py install
+  - pip install .
   - cd ..
 
 # command to install dependencies
 install:
-  - sudo python3 setup.py -q install
+  - pip install .
 # command to run tests
 script:
-  - python3 labjackcontroller/lab_unittests.py
+  - labjackcontroller/lab_unittests.py
