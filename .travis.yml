@@ -5,7 +5,7 @@ python:
 
 # Get base LJM/Kipling setup
 before_install:
-  - sudo apt-get install -y python3-setuptools
+  - pip install setuptools
   - wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
