@@ -13,11 +13,10 @@ before_install:
   - cd Python_LJM_2018_10_19
   - sudo python setup.py install
   - cd ..
-  - echo $PWD
 
 # command to install dependencies
 install:
-  - sudo python setup.py -q install
+  - sudo python3 setup.py -q install
 # command to run tests
 script:
-  - labjackcontroller/lab_unittests.py
+  - python3 labjackcontroller/lab_unittests.py
