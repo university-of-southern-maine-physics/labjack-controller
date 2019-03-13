@@ -12,6 +12,8 @@ before_install:
   - unzip Python_LJM_2018_10_19.zip
   - cd Python_LJM_2018_10_19
   - sudo python setup.py install
+  - cd ..
+  - echo $PWD
 
 # command to install dependencies
 install:
