@@ -9,6 +9,8 @@ python:
 
 # Get base LJM/Kipling setup
 before_install:
+  # Needed for PyPy
+  - pip install cython
   # First, get the base library
   - wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
   - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
