@@ -8,22 +8,33 @@ matrix:
 
     - os: linux
       dist: xenial
-      env: PYTHON_VERSION=3.7-dev
+      language: python
+      python: 3.7
+
+    - os: linux
+      dist: xenial
+      language: python
+      python: 3.5
+
   allow_failures:
     - os: osx
 
 # Get base LJM/Kipling setup
 before_install:
   - |
-    pip install -U pip
-    pip install --egg --no-binary pyenv pyenv
-    export PATH=~/.pyenv/bin:$PATH
-    eval "$(pyenv init -)"
-    pyenv install --skip-existing $PYTHON_VERSION
-    pyenv global $PYTHON_VERSION
-    pyenv shell $PYTHON_VERSION
-    pip install -U pip setuptools wheel py
-    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo sh install-linux.sh -t; fi
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      pip install -U pip;
+      pip install --egg --no-binary pyenv pyenv;
+      export PATH=~/.pyenv/bin:$PATH;
+      eval "$(pyenv init -)";
+      pyenv install --skip-existing $PYTHON_VERSION;
+      pyenv global $PYTHON_VERSION;
+      pyenv shell $PYTHON_VERSION;
+      pip install -U pip setuptools wheel py;
+    fi
+    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      sudo sh install-linux.sh -t;
+    fi
 
 # command to install dependencies
 install:
