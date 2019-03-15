@@ -3,24 +3,16 @@ python:
   # CPython versions
   - "3.5"
   - "3.6"
-  - "3.7-dev"
-  # PyPy versions
-  - "pypy3.5"
+  - "3.7"
+
+matrix:
+  include:
+    - os: linux
+      dist: xenial
 
 # Get base LJM/Kipling setup
 before_install:
-  # Needed for PyPy
-  - pip install Cython --install-option="--no-cython-compile"
-  # First, get the base library
-  - wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
-  - tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
-  - sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
-  # Next, get the Python wrapper
-  - wget https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
-  - unzip Python_LJM_2018_10_19.zip
-  - cd Python_LJM_2018_10_19
-  - pip install .
-  - cd ..
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo sh install-linux.sh -t; fi
 
 # command to install dependencies
 install:
