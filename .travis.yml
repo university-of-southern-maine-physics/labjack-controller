@@ -19,4 +19,4 @@ install:
   - pip install .
 # command to run tests
 script:
-  - labjackcontroller/lab_unittests.py
+  - pytest
