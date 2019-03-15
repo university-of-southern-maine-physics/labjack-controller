@@ -3,8 +3,7 @@ python:
   # CPython versions
   - "3.5"
   - "3.6"
-  - "3.7"
-  - "3.8-dev"
+  - "3.7-dev"
   # PyPy versions
   - "pypy3.5"
 
