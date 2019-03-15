@@ -11,11 +11,22 @@ This is a package designed to make streaming data from [LabJack](https://labjack
 
 ## Requirements
 
-+ Python 3.7+
++ Python 3.5+
 + [LJM](https://labjack.com/support/software/installers/ljm)
 + [Python for LJM](https://labjack.com/support/software/installers/ljm)
 
 All other requirements will be automatically acquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
+
+## Installation
+[![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
+
+To install, clone this repository and install with `pip`. Be terminal, this would be the steps
+
+```bash
+git clone https://github.com/university-of-southern-maine-physics/labjack-controller.git
+cd labjack-controller
+pip install .
+```
 
 ## Sample Usage
 
@@ -24,7 +35,7 @@ Multiple demonstrations of library functions are located in the `demos` folder. 
 ```python
 from labjackcontroller.labtools import LabjackReader
 
-myLabjack = LabjackReader("T7", connection="ETHERNET")
+myLabjack = LabjackReader("T7", connection_type="ETHERNET")
 
 duration = 60  # Seconds
 scan_rate = 50000  # Hz
