@@ -1,8 +1,8 @@
 from labjackcontroller.labtools import LabjackReader
 
 device_type = "T7"
+duration = 30
 connection_type = "USB"
-duration = 60
 channels = ["AIN0", "AIN1", "AIN2", "AIN3"]
 voltages = [10.0, 10.0, 10.0, 10.0]
 
