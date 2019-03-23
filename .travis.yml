@@ -43,4 +43,4 @@ install:
 
 # command to run tests
 script:
-  - pytest tests
+  - pytest  -v

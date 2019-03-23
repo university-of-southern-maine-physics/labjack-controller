@@ -6,7 +6,7 @@ setup(name='labjackcontroller',
       url='https://github.com/Nyctanthous/labjack-controller',
       author='Ben Montgomery',
       packages=['labjackcontroller'],
-      licence='MIT',
+      license='MIT',
       classifiers=[
           'Development Status :: 4 - Beta',
           'Intended Audience :: Science/Research',
