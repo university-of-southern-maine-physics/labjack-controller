@@ -17,6 +17,7 @@ setup(name='labjackcontroller',
                         'typing',
                         'numpy',
                         'pandas',
-                        'colorama'
+                        'colorama',
+                        'LJMPython'
                        ],
       zip_safe=False)

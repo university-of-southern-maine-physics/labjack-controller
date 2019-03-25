@@ -34,12 +34,14 @@ before_install:
       pip install pytest
     fi
     if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      sudo -H sh installers/install-linux.sh -t;
+      wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
+      tar -zvxf labjack_ljm_software_2018_08_30_x86_64.tar.gz
+      sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
     fi
 
 # command to install dependencies
 install:
-  - pip install .
+  - pip install -r requirements.txt
 
 # command to run tests
 script:
