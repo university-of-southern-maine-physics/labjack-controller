@@ -33,7 +33,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class LJMLibrary(metaclass=Singleton):
+class LJMLibrary(metaclass=Singleton):x
     # Base reference to the staticlib.
     staticlib = None
     ljm_buffer = {}
@@ -1083,7 +1083,7 @@ class LabjackReader(object):
 
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
-        num_frames: int = len(names)
+        num_frames = len(names)
         ljm.eWriteNames(self.handle, num_frames, names, values)
 
         # Configure and start stream
