@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(name='labjackcontroller',
       description='A helper library to control LabJack devices',
-      version='0.1',
+      version='0.2',
       url='https://github.com/Nyctanthous/labjack-controller',
       author='Ben Montgomery',
       packages=['labjackcontroller'],

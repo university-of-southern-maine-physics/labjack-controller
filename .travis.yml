@@ -32,6 +32,9 @@ before_install:
       pyenv shell $PYTHON_VERSION;
       pip install -U pip setuptools wheel py;
       pip install pytest
+      curl -O https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30.zip
+      unzip labjack_ljm_software_2018_08_30.zip
+      sudo installer -pkg labjack_ljm_software_2018_08_30/labjack_ljm_software_2018_08_30.pkg -target /
     fi
     if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
       wget https://labjack.com/sites/default/files/software/labjack_ljm_software_2018_08_30_x86_64.tar.gz
