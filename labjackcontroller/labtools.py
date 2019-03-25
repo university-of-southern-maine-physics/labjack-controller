@@ -33,7 +33,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class LJMLibrary(metaclass=Singleton):x
+class LJMLibrary(metaclass=Singleton):
     # Base reference to the staticlib.
     staticlib = None
     ljm_buffer = {}
