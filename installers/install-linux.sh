@@ -11,7 +11,7 @@ sudo ./labjack_ljm_software_2018_08_30_x86_64/labjack_ljm_installer.run
 wget https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
 unzip Python_LJM_2018_10_19.zip
 cd Python_LJM_2018_10_19
-pip install .
+sudo pip install .
 cd ..
 
 usage() { echo "Usage: $0 [-t]" 1>&2; exit 1; }
@@ -23,7 +23,7 @@ while getopts ":ht" opt; do
         usage
       ;;
     t ) # Install our package
-        pip install .
+        sudo pip install .
       ;;
     \? ) usage
       ;;
