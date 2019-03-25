@@ -579,19 +579,17 @@ class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
     # Keep track of the input channels we're reading.
-    input_channels: List[str]
     input_channels = []
 
     # Declare a data storage handle, is a ctypes.c_int with some number
     # (in other words, is a C array)
-    data_arr: ctypes.c_int
     data_arr = None
 
     # Also, specify the largest index that is populated.
     _max_index = 0
 
     # There will be an int handle for the LabJack device
-    handle: int
+    handle = -1
 
     connection_open = False
 
