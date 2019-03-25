@@ -1049,8 +1049,8 @@ class LabjackReader(object):
 
         """
         # Sanity check on inputs
-        num_addresses: int = len(inputs)
-        max_sample_rate: int = scan_rate * num_addresses
+        num_addresses = len(inputs)
+        max_sample_rate = scan_rate * num_addresses
 
         if scans_per_read == -1:
             scans_per_read = max_sample_rate
