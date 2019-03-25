@@ -39,29 +39,29 @@ class LJMLibrary(metaclass=Singleton):
     ljm_buffer = {}
     ljm_is_open = {}
 
-    def __init__(cls):
+    def __init__(self):
         os_is = sys.platform.startswith
         try:
-            cls.staticlib = (ctypes.WinDLL("LabJackM.dll") if os_is("win32") else
-                             ctypes.CDLL("LabJackM.dll") if os_is("cygwin") else
-                             ctypes.CDLL("libLabJackM.so") if os_is("linux") else
-                             ctypes.CDLL("libLabJackM.dylib") if os_is("darwin")
-                             else None)
+            self.staticlib = (ctypes.WinDLL("LabJackM.dll") if os_is("win32") else
+                              ctypes.CDLL("LabJackM.dll") if os_is("cygwin") else
+                              ctypes.CDLL("libLabJackM.so") if os_is("linux") else
+                              ctypes.CDLL("libLabJackM.dylib") if os_is("darwin")
+                              else None)
         except Exception as e:
             if os_is("darwin"):
                 try:
-                    return ctypes.CDLL("/usr/local/lib/libLabJackM.dylib")
+                    self.staticlib = ctypes.CDLL("/usr/local/lib/libLabJackM.dylib")
                 except Exception:
                     pass
 
             raise LJMError(errorString="Cannot load the LJM library %s.\n%s"
-                           % (str(cls.staticlib), str(e)))
+                           % (str(self.staticlib), str(e)))
 
-        if not cls.staticlib:
+        if not self.staticlib:
             raise LJMError(errorString="Cannot load the LJM library."
                            " Unsupported platform %s." % sys.platform)
 
-    def _validate_handle(cls, handle: int, stream_mode=False) -> None:
+    def _validate_handle(self, handle: int, stream_mode=False) -> None:
         """
         Internal method to validate the handle that a user provides,
         ensuring we have connected to it.
@@ -88,28 +88,28 @@ class LJMLibrary(metaclass=Singleton):
             stream initialization has not happened or was originally not
             successful.
         """
-        if stream_mode and handle not in cls.ljm_buffer:
+        if stream_mode and handle not in self.ljm_buffer:
             raise KeyError("Cannot find handle %s in the collection of known"
                            " connections.")
 
-        if not cls.ljm_is_open[handle]:
+        if not self.ljm_is_open[handle]:
             raise Exception("The connection for this device is not open,"
                             " therefore it cannot be closed.")
 
-    def _num_to_ipv4(cls, num: int) -> str:
+    def _num_to_ipv4(self, num: int) -> str:
         """
         Internal method used to convert the LJM library's integer
         representation of IP addresses to a string representation of the same.
         """
-        ip_str = ("\0"*ljm_constants.IPv4_STRING_SIZE).encode("ascii")
+        ip_str = ("\0" * ljm_constants.IPv4_STRING_SIZE).encode("ascii")
 
-        error = cls.staticlib.LJM_NumberToIP(ctypes.c_uint32(num), ip_str)
+        error = self.staticlib.LJM_NumberToIP(ctypes.c_uint32(num), ip_str)
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
         return str(ip_str.decode("ascii", "ignore").split("\0", 1)[0])
 
-    def _names_to_modbus_addresses(cls, names: List[str]):
+    def _names_to_modbus_addresses(self, names: List[str]):
         num_frames = len(names)
 
         names = [name.encode("ascii") for name in names
@@ -129,16 +129,16 @@ class LJMLibrary(metaclass=Singleton):
         type_arr = (c_int32 * num_frames)()
 
         ref = ctypes.byref
-        error = cls.staticlib.LJM_NamesToAddresses(c_int32(num_frames),
-                                                   ref(names),
-                                                   ref(address_arr),
-                                                   ref(type_arr))
+        error = self.staticlib.LJM_NamesToAddresses(c_int32(num_frames),
+                                                    ref(names),
+                                                    ref(address_arr),
+                                                    ref(type_arr))
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
         return address_arr
 
-    def connection_close(cls, handle: str):
+    def connection_close(self, handle: str):
         """
         Based on the LJM function LJM_Close. Closes the connection associated
         with the device handle, freeing it for usage elsewhere.
@@ -160,15 +160,15 @@ class LJMLibrary(metaclass=Singleton):
         LJMError
             If the LJM library cannot close the valid handle.
         """
-        cls._validate_handle(handle)
+        self._validate_handle(handle)
 
-        error = cls.staticlib.LJM_Close(handle)
+        error = self.staticlib.LJM_Close(handle)
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
-        cls.ljm_is_open[handle] = False
+        self.ljm_is_open[handle] = False
 
-    def connection_close_all(cls):
+    def connection_close_all(self):
         """
         Based on the LJM function LJM_CloseAll. Closes all connections opened
         with all devices, freeing them for usage elsewhere.
@@ -188,14 +188,14 @@ class LJMLibrary(metaclass=Singleton):
 
         """
 
-        error = cls.staticlib.LJM_CloseAll()
+        error = self.staticlib.LJM_CloseAll()
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
         # Empty the dict.
-        cls.ljm_is_open.clear()
+        self.ljm_is_open.clear()
 
-    def connection_info(cls, handle: int):
+    def connection_info(self, handle: int):
         """
         Based on the LJM function LJM_GetHandleInfo. Returns attribute info
         about the device associated with the selected handle.
@@ -232,7 +232,7 @@ class LJMLibrary(metaclass=Singleton):
         LJMError
             If the LJM library cannot get information about the handle.
         """
-        cls._validate_handle(handle)
+        self._validate_handle(handle)
 
         device_type = ctypes.c_int32(0)
         connection_type = ctypes.c_int32(0)
@@ -261,10 +261,10 @@ class LJMLibrary(metaclass=Singleton):
                            "Ethernet" if connection_type == ljm_constants.ctETHERNET
                            else "Other")
         return device_name, connection_name, serial_num.value, \
-            cls._num_to_ipv4(ipv4_address.value), port.value, \
+            self._num_to_ipv4(ipv4_address.value), port.value, \
             max_packet_size.value
 
-    def connection_open(cls, device_type: str, connection_type: str,
+    def connection_open(self, device_type: str, connection_type: str,
                         device_id) -> int:
         """
         Opens a connection to the device with the designated inputs.
@@ -325,7 +325,10 @@ class LJMLibrary(metaclass=Singleton):
                             % str(type(device_id)))
         temp_handle = ctypes.c_int32(0)
 
-        error = ljm_reference.staticlib \
+        if isinstance(device_id, int):
+            device_id = str(device_id)
+
+        error = self.staticlib \
             .LJM_OpenS(device_type.encode("ascii"),
                        connection_type.encode("ascii"),
                        device_id.encode("ascii"),
@@ -335,11 +338,48 @@ class LJMLibrary(metaclass=Singleton):
             raise LJMError(error)
 
         # Note that the connection is now open.
-        cls.ljm_is_open[temp_handle.value] = True
+        self.ljm_is_open[temp_handle.value] = True
 
         return temp_handle.value
 
-    def stream_read(cls, handle: int) -> Tuple[ctypes.c_double, int, int]:
+    def list_all(self) -> Tuple[str, str, str, str]:
+        num_found = ctypes.c_int32(0)
+        dev_types = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
+        conn_types = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
+        ser_nums = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
+        ip_addrs = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
+
+        error = self.staticlib.LJM_ListAll(ljm_constants.dtANY,
+                                           ljm_constants.ctANY,
+                                           ctypes.byref(num_found),
+                                           ctypes.byref(dev_types),
+                                           ctypes.byref(conn_types),
+                                           ctypes.byref(ser_nums),
+                                           ctypes.byref(ip_addrs))
+
+        if error != ljm_errorcodes.NOERROR:
+            raise LJMError(error)
+
+        num_found = num_found.value
+
+        dev_types = dev_types[0:num_found][:]
+        conn_types = conn_types[0:num_found][:]
+        ser_nums = ser_nums[0:num_found][:]
+        ip_addrs = ip_addrs[0:num_found][:]
+
+        for i in range(0, num_found):
+            dev_types[i] = ("T7" if dev_types[i] == ljm_constants.dtT7 else
+                            "T4" if dev_types[i] == ljm_constants.dtT4 else
+                            "Other")
+            conn_types[i] = ("USB" if conn_types[i] == ljm_constants.ctUSB else
+                             "WIFI" if conn_types[i] == ljm_constants.ctWIFI else
+                             "Ethernet" if conn_types[i] == ljm_constants.ctETHERNET
+                             else "Other")
+            ip_addrs[i] = self._num_to_ipv4(ip_addrs[i])
+
+        return list(zip(*[dev_types, conn_types, ser_nums, ip_addrs]))
+
+    def stream_read(self, handle: int) -> Tuple[ctypes.c_double, int, int]:
         """
         Returns data from a LabJack device with an open connection that is
         currently streaming.
@@ -375,18 +415,18 @@ class LJMLibrary(metaclass=Singleton):
             If the LJM library cannot read from the device.
         """
 
-        cls._validate_handle(handle, stream_mode=True)
+        self._validate_handle(handle, stream_mode=True)
 
         # Initialize variables that we'll populate with results
-        packet_data = (ctypes.c_double * cls.ljm_buffer[handle])()
+        packet_data = (ctypes.c_double * self.ljm_buffer[handle])()
         dev_buffer_backlog = ctypes.c_int32(0)
         ljm_buffer_backlog = ctypes.c_int32(0)
 
         # Actually read data from the device
-        error = cls.staticlib.LJM_eStreamRead(handle,
-                                              ctypes.byref(packet_data),
-                                              ctypes.byref(dev_buffer_backlog),
-                                              ctypes.byref(ljm_buffer_backlog))
+        error = self.staticlib.LJM_eStreamRead(handle,
+                                               ctypes.byref(packet_data),
+                                               ctypes.byref(dev_buffer_backlog),
+                                               ctypes.byref(ljm_buffer_backlog))
         # Handle errors if they occured
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
@@ -394,7 +434,7 @@ class LJMLibrary(metaclass=Singleton):
         return packet_data, dev_buffer_backlog.value, \
             ljm_buffer_backlog.value
 
-    def stream_start(cls, handle: int, scan_list: List[str], scan_rate: float,
+    def stream_start(self, handle: int, scan_list: List[str], scan_rate: float,
                      scans_per_read: int) -> float:
         """
         Based on the LJM function LJM_eStreamStart. Creates a buffer that the
@@ -428,25 +468,25 @@ class LJMLibrary(metaclass=Singleton):
             If the LJM library cannot get information about the handle.
         """
 
-        cls._validate_handle(handle)
+        self._validate_handle(handle)
 
         scan_rate = ctypes.c_double(scan_rate)
         num_addrs = len(scan_list)
-        scan_list = cls._names_to_modbus_addresses(scan_list)
-        cls.ljm_buffer[handle] = scans_per_read * num_addrs
+        scan_list = self._names_to_modbus_addresses(scan_list)
+        self.ljm_buffer[handle] = scans_per_read * num_addrs
 
-        error = cls.staticlib.LJM_eStreamStart(handle,
-                                               c_int32(scans_per_read),
-                                               c_int32(num_addrs),
-                                               ctypes.byref(scan_list),
-                                               ctypes.byref(scan_rate))
+        error = self.staticlib.LJM_eStreamStart(handle,
+                                                c_int32(scans_per_read),
+                                                c_int32(num_addrs),
+                                                ctypes.byref(scan_list),
+                                                ctypes.byref(scan_rate))
 
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
         return scan_rate.value
 
-    def stream_stop(cls, handle: int) -> None:
+    def stream_stop(self, handle: int) -> None:
         """
         Based on the LJM function LJM_eStreamStop. Frees the buffer that the
         LJM device records data into, and then makes the device stop streaming.
@@ -472,15 +512,15 @@ class LJMLibrary(metaclass=Singleton):
             If the LJM library cannot get information about the handle.
         """
 
-        cls._validate_handle(handle, stream_mode=True)
+        self._validate_handle(handle, stream_mode=True)
 
-        del cls.ljm_buffer[handle]
+        del self.ljm_buffer[handle]
 
-        error = cls.staticlib.LJM_eStreamStop(handle)
+        error = self.staticlib.LJM_eStreamStop(handle)
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
-    def modify_settings(cls, **kwargs):
+    def modify_settings(self, **kwargs):
         """
         Based on the LJM function writeLibraryConfigS. Writes a configuration
         value to the Labjack library itself.
@@ -523,8 +563,8 @@ class LJMLibrary(metaclass=Singleton):
                 value = ctypes.c_double(1) if kwargs[kwarg] \
                     else ctypes.c_double(0)
                 try:
-                    error = cls.staticlib.LJM_WriteLibraryConfigS(setting,
-                                                                  value)
+                    error = self.staticlib.LJM_WriteLibraryConfigS(setting,
+                                                                   value)
                 except Exception as e:
                     print("Unexpected error writing to LJM library" + e)
                 if error != ljm_errorcodes.NOERROR:
@@ -1127,7 +1167,7 @@ class LabjackReader(object):
         elif mode == "range" or mode == 'range':
             if "start" in kwargs and "end" in kwargs:
                 from_range, to_range = kwargs["start"], kwargs["end"]
-                if 0 <= from_range < to_range:
+                if 0 <= from_range < to_range and to_range < max_row:
                     return self._reshape_data(from_range, to_range)
                 else:
                     raise Exception("Invalid range provided of [%d, %d]"
@@ -1137,7 +1177,7 @@ class LabjackReader(object):
                                 " be specified in range mode.")
         elif mode == "relative" or mode == 'relative':
             if "num_rows" in kwargs:
-                if kwargs["num_rows"] < 0:
+                if kwargs["num_rows"] < 0 or kwargs["num_rows"] > max_row:
                     raise Exception("Invalid number of rows provided")
                 else:
                     return self._reshape_data(max_row - kwargs["num_rows"],
@@ -1251,7 +1291,7 @@ class LabjackReader(object):
         exponential_mode = True
 
         # The number of elements we get back in a packet.
-        scans_per_packet = 1
+        scans_per_read = 1
 
         last_good_rate = -1
         last_good_scan_per_packet = -1
@@ -1273,16 +1313,16 @@ class LabjackReader(object):
                                                          stream_setting,
                                                          resolution,
                                                          med_rate,
-                                                         scans_per_read=scans_per_packet)
+                                                         scans_per_read=scans_per_read)
                 except Exception as e:
                     print(e)
-                    if scans_per_packet < med_rate:
+                    if scans_per_read < med_rate:
                         # First, try increasing the number of elements/packet.
-                        scans_per_packet = min(2 * scans_per_packet, med_rate)
+                        scans_per_read = min(2 * scans_per_read, med_rate)
                     else:
                         # Step down, and turn off exponential mode
                         exponential_mode = False
-                        scans_per_packet = last_good_scan_per_packet
+                        scans_per_read = last_good_scan_per_packet
                         max_rate = med_rate
                         med_rate = (min_rate + med_rate) / 2
 
@@ -1297,7 +1337,7 @@ class LabjackReader(object):
             # The below condition could happen when we are in binary search
             # mode, due to converging bounds.
             if last_attempted_rate == med_rate \
-               and last_attempted_sample == scans_per_packet \
+               and last_attempted_sample == scans_per_read \
                and not exponential_mode:
 
                 # In all cases, we need to adjust the bounds of our search,
@@ -1313,7 +1353,7 @@ class LabjackReader(object):
                 continue
 
             last_attempted_rate = med_rate
-            last_attempted_sample = scans_per_packet
+            last_attempted_sample = scans_per_read
 
             iterations = 0
             buffer_size = 0
@@ -1341,14 +1381,13 @@ class LabjackReader(object):
                     if buffer_size > MAX_BUFFERSIZE \
                        or num_skips \
                        or ljm_buffer_size > MAX_LJM_BUFFERSIZE:
-                        if scans_per_packet < med_rate:
+                        if scans_per_read < med_rate:
                             # First, try increasing the number of elements
                             # per packet.
-                            scans_per_packet = min(2 * scans_per_packet,
-                                                   med_rate)
+                            scans_per_read = min(2 * scans_per_read, med_rate)
                         else:
                             # Step down, and turn off exponential mode
-                            scans_per_packet = 1
+                            scans_per_read = 1
                             max_rate = med_rate
                             med_rate = (min_rate + med_rate) / 2
                             exponential_mode = False
@@ -1364,12 +1403,12 @@ class LabjackReader(object):
                         break
 
             except LJMError:
-                if scans_per_packet < med_rate:
+                if scans_per_read < med_rate:
                     # First, try increasing the number of elements per packet.
-                    scans_per_packet = min(2 * scans_per_packet, med_rate)
+                    scans_per_read = min(2 * scans_per_read, med_rate)
                 else:
                     # Step down, and turn off exponential mode
-                    scans_per_packet = last_good_scan_per_packet
+                    scans_per_read = last_good_scan_per_packet
                     max_rate = med_rate
                     med_rate = (min_rate + med_rate) / 2
                     exponential_mode = False
@@ -1380,7 +1419,7 @@ class LabjackReader(object):
                    and ljm_buffer_size <= MAX_LJM_BUFFERSIZE):
                     # Store these working values
                     last_good_rate = med_rate
-                    last_good_scan_per_packet = scans_per_packet
+                    last_good_scan_per_packet = scans_per_read
                     valid_config = True
 
                     if exponential_mode:
