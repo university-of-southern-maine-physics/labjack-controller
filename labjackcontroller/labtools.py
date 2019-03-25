@@ -1,3 +1,4 @@
+import labjack.ljm as ljm
 from labjack.ljm import constants as ljm_constants, \
                         errorcodes as ljm_errorcodes
 from labjack.ljm.ljm import LJMError
@@ -36,6 +37,7 @@ class LJMLibrary(metaclass=Singleton):
     # Base reference to the staticlib.
     staticlib = None
     ljm_buffer = {}
+    ljm_is_open = {}
 
     def __init__(cls):
         os_is = sys.platform.startswith
@@ -59,7 +61,46 @@ class LJMLibrary(metaclass=Singleton):
             raise LJMError(errorString="Cannot load the LJM library."
                            " Unsupported platform %s." % sys.platform)
 
+    def _validate_handle(cls, handle: int, stream_mode=False) -> None:
+        """
+        Internal method to validate the handle that a user provides,
+        ensuring we have connected to it.
+
+        Parameters
+        ----------
+        handle : int
+            A valid handle to a LJM device that has an opened connection.
+        stream_mode : bool, optional
+            Perform validation checking for stream_mode, additionally ensuring
+            that we have already started the stream.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        Exception
+            If the handle specified does not have a connection to close.
+        KeyError, optional
+            Only is checked if stream_mode = True. Happens when the handle
+            specified does not have a buffer associated with it, meaning the
+            stream initialization has not happened or was originally not
+            successful.
+        """
+        if stream_mode and handle not in cls.ljm_buffer:
+            raise KeyError("Cannot find handle %s in the collection of known"
+                           " connections.")
+
+        if not cls.ljm_is_open[handle]:
+            raise Exception("The connection for this device is not open,"
+                            " therefore it cannot be closed.")
+
     def _num_to_ipv4(cls, num: int) -> str:
+        """
+        Internal method used to convert the LJM library's integer
+        representation of IP addresses to a string representation of the same.
+        """
         ip_str = ("\0"*ljm_constants.IPv4_STRING_SIZE).encode("ascii")
 
         error = cls.staticlib.LJM_NumberToIP(ctypes.c_uint32(num), ip_str)
@@ -100,27 +141,37 @@ class LJMLibrary(metaclass=Singleton):
     def connection_close(cls, handle: str):
         """
         Based on the LJM function LJM_Close. Closes the connection associated
-        with the device handle.
+        with the device handle, freeing it for usage elsewhere.
 
         Parameters
         ----------
         handle: str
-            A valid string handle to a LJM device that has an opened
+            A valid handle to a LJM device that has an opened
             connection.
 
         Returns
         -------
         None
 
+        Raises
+        ------
+        Exception
+            If the handle specified does not have a connection to close.
+        LJMError
+            If the LJM library cannot close the valid handle.
         """
+        cls._validate_handle(handle)
+
         error = cls.staticlib.LJM_Close(handle)
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
+        cls.ljm_is_open[handle] = False
+
     def connection_close_all(cls):
         """
         Based on the LJM function LJM_CloseAll. Closes all connections opened
-        with all devices.
+        with all devices, freeing them for usage elsewhere.
 
         Parameters
         ----------
@@ -129,6 +180,11 @@ class LJMLibrary(metaclass=Singleton):
         Returns
         -------
         None
+
+        Raises
+        ------
+        LJMError
+            If the LJM library cannot close a handle.
 
         """
 
@@ -136,16 +192,18 @@ class LJMLibrary(metaclass=Singleton):
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
-    def connection_info(cls, handle: str):
+        # Empty the dict.
+        cls.ljm_is_open.clear()
+
+    def connection_info(cls, handle: int):
         """
         Based on the LJM function LJM_GetHandleInfo. Returns attribute info
         about the device associated with the selected handle.
 
         Parameters
         ----------
-        handle: str
-            A valid string handle to a LJM device that has an opened
-            connection.
+        handle: int
+            A valid handle to a LJM device that has an opened connection.
 
         Returns
         -------
@@ -166,7 +224,15 @@ class LJMLibrary(metaclass=Singleton):
         max_packet_size: int
             The maximum packet size that can be sent or recieved from the
             device. Varies depending on the device and connection type.
+
+        Raises
+        ------
+        Exception
+            If the handle specified does not have a connection to close.
+        LJMError
+            If the LJM library cannot get information about the handle.
         """
+        cls._validate_handle(handle)
 
         device_type = ctypes.c_int32(0)
         connection_type = ctypes.c_int32(0)
@@ -198,7 +264,137 @@ class LJMLibrary(metaclass=Singleton):
             cls._num_to_ipv4(ipv4_address.value), port.value, \
             max_packet_size.value
 
-    def stream_start(cls, handle: str, scan_list: List[str], scan_rate: float,
+    def connection_open(cls, device_type: str, connection_type: str,
+                        device_id) -> int:
+        """
+        Opens a connection to the device with the designated inputs.
+
+        Parameters
+        ----------
+        device_type : str
+            A LabJack model. Valid options are
+            'ANY' for any arbitrary device connected.
+            'T7' for the T7 and T7 Pro
+            'T4' for the T4
+            'DIGIT' for Digit series devices.
+        connection_type : str
+            Valid options are
+            'ANY' for attempting any mode of connection
+            'USB' for attempting connection over USB
+            'ETHERNET' for attempting connection over Ethernet
+            'WIFI' for attempting connection over WiFi
+            Support for each of these modes is a function of the LabJack model
+            you are connecting to. When 'ANY' is selected, the LabJack library
+            generally defaults to a USB connection.
+        device_identifier : str
+            The user-designated name of the LabJack device, or an IP address
+            if approperiate.
+
+        Returns
+        -------
+        handle : int
+            A handle that is used as a reference to the connection to the
+            Labjack device.
+
+        Raises
+        ------
+        LJMError
+            If the LJM library cannot open a connection.
+        TypeError
+            If the type of an input is invalid.
+        ValueError
+            If a value provided as an argument is invalid.
+        """
+        if not isinstance(device_type, str):
+            raise TypeError("device_type error: expected a string instead"
+                            " of %s."
+                            % str(type(device_type)))
+        if device_type not in ["T7", "T4", "DIGIT", "ANY"]:
+            raise ValueError("Expected device type to be either \"T7\","
+                             " \"T4\", \"DIGIT\", or \"ANY\"")
+        if not isinstance(connection_type, str):
+            raise TypeError("connection_type error: expected a string instead"
+                            " of %s."
+                            % str(type(connection_type)))
+        if connection_type not in ["USB", "ETHERNET", "WIFI", "ANY"]:
+            raise ValueError("Expected connection type to be either"
+                             "\"USB\", \"ETHERNET\", \"WIFI\", or \"ANY\"")
+        if not (isinstance(device_id, str) or isinstance(device_id, int)):
+            raise TypeError("device_identifier error: expected a string"
+                            " or an int instead of %s."
+                            % str(type(device_id)))
+        temp_handle = ctypes.c_int32(0)
+
+        error = ljm_reference.staticlib \
+            .LJM_OpenS(device_type.encode("ascii"),
+                       connection_type.encode("ascii"),
+                       device_id.encode("ascii"),
+                       ctypes.byref(temp_handle))
+
+        if error != ljm_errorcodes.NOERROR:
+            raise LJMError(error)
+
+        # Note that the connection is now open.
+        cls.ljm_is_open[temp_handle.value] = True
+
+        return temp_handle.value
+
+    def stream_read(cls, handle: int) -> Tuple[ctypes.c_double, int, int]:
+        """
+        Returns data from a LabJack device with an open connection that is
+        currently streaming.
+
+        Parameters
+        ----------
+        handle: int
+            A valid handle to a LJM device that has an opened connection.
+
+        Returns
+        -------
+        packet_data : c_double
+            A c_double array with stream data. All channels are ordered
+            sequentially.
+        device_buffer_backlog : int
+            The number of scans left in the device buffer, as measured from
+            when data was last collected from the device. This should usually
+            be near zero and not growing.
+        ljm_buffer_backlog : int
+            The number of scans left in the LJM buffer, as measured from after
+            the data returned from this function is removed from the LJM
+            buffer. This should usually be near zero and not growing.
+
+        Raises
+        ------
+        KeyError
+            If the handle specified does not have a buffer associated with it,
+            meaning the stream initialization has not happened or was
+            originally not successful.
+        Exception
+            If the handle specified does not have a connection to close.
+        LJMError
+            If the LJM library cannot read from the device.
+        """
+
+        cls._validate_handle(handle, stream_mode=True)
+
+        # Initialize variables that we'll populate with results
+        packet_data = (ctypes.c_double * cls.ljm_buffer[handle])()
+        dev_buffer_backlog = ctypes.c_int32(0)
+        ljm_buffer_backlog = ctypes.c_int32(0)
+
+        # Actually read data from the device
+        error = cls.staticlib.LJM_eStreamRead(handle,
+                                              ctypes.byref(packet_data),
+                                              ctypes.byref(dev_buffer_backlog),
+                                              ctypes.byref(ljm_buffer_backlog))
+        # Handle errors if they occured
+        if error != ljm_errorcodes.NOERROR:
+            raise LJMError(error)
+
+        return packet_data, dev_buffer_backlog.value, \
+            ljm_buffer_backlog.value
+
+    def stream_start(cls, handle: int, scan_list: List[str], scan_rate: float,
                      scans_per_read: int) -> float:
         """
         Based on the LJM function LJM_eStreamStart. Creates a buffer that the
@@ -207,14 +403,14 @@ class LJMLibrary(metaclass=Singleton):
 
         Parameters
         ----------
-        handle: str
+        handle : int
             A valid string handle to a LJM device that has an opened
             connection.
-        scan_list: List[str]
+        scan_list : List[str]
             List of addresses ("AIN0", etc) to scan from.
-        scan_rate: float
+        scan_rate : float
             The rate in Hz that all specified addresses will be read at.
-        scans_per_read: int
+        scans_per_read : int
             When reading data from the stream, this value determines how
             many scans are returned. There is no relation between this
             parameter and the device's maximum packet size.
@@ -223,7 +419,17 @@ class LJMLibrary(metaclass=Singleton):
         -------
         actual_scan_rate: float
             The actual frequency the device will scan at.
+
+        Raises
+        ------
+        Exception
+            If the handle specified does not have a connection to stream on.
+        LJMError
+            If the LJM library cannot get information about the handle.
         """
+
+        cls._validate_handle(handle)
+
         scan_rate = ctypes.c_double(scan_rate)
         num_addrs = len(scan_list)
         scan_list = cls._names_to_modbus_addresses(scan_list)
@@ -240,27 +446,35 @@ class LJMLibrary(metaclass=Singleton):
 
         return scan_rate.value
 
-    def stream_stop(cls, handle):
+    def stream_stop(cls, handle: int) -> None:
         """
         Based on the LJM function LJM_eStreamStop. Frees the buffer that the
         LJM device records data into, and then makes the device stop streaming.
 
         Parameters
         ----------
-        handle: str
-            A valid string handle to a LJM device that has an opened
-            connection.
+        handle: int
+            A valid handle to a LJM device that has an opened connection.
 
         Returns
         -------
         None
 
+        Raises
+        ------
+        KeyError
+            If the handle specified does not have a buffer associated with it,
+            meaning the stream initialization has not happened or was
+            originally not successful.
+        Exception
+            If the handle specified does not have a connection to close.
+        LJMError
+            If the LJM library cannot get information about the handle.
         """
-        if handle in cls.ljm_buffer:
-            del cls.ljm_buffer[handle]
-        else:
-            raise Exception("Cannot stop stream, because it was never started"
-                            "for this device.")
+
+        cls._validate_handle(handle, stream_mode=True)
+
+        del cls.ljm_buffer[handle]
 
         error = cls.staticlib.LJM_eStreamStop(handle)
         if error != ljm_errorcodes.NOERROR:
@@ -334,7 +548,7 @@ class LabjackReader(object):
     data_arr = None
 
     # Also, specify the largest index that is populated.
-    max_index = 0
+    _max_index = 0
 
     # There will be an int handle for the LabJack device
     handle: int
@@ -360,8 +574,12 @@ class LabjackReader(object):
         Parameters
         ----------
         device_type : str
-            A LabJack model, such as T7, T4, or DIGIT
-        connection_type : {'ANY', 'USB', 'ETHERNET', or 'WIFI'}, optional
+            A LabJack model. Valid options are
+            'ANY' for any arbitrary device connected.
+            'T7' for the T7 and T7 Pro
+            'T4' for the T4
+            'DIGIT' for Digit series devices.
+        connection_type : str, optional
             Valid options are
             'ANY' for attempting any mode of connection
             'USB' for attempting connection over USB
@@ -369,37 +587,29 @@ class LabjackReader(object):
             'WIFI' for attempting connection over WiFi
             Support for each of these modes is a function of the LabJack model
             you are connecting to. When 'ANY' is selected, the LabJack library
-            generally defaults to the fastest avaliable connection.
+            generally defaults to a USB connection.
         device_identifier : str, optional
-            The user-designated name of the LabJack device.
+            The user-designated name of the LabJack device, or an IP address
+            if approperiate.
 
         Returns
         -------
-        None
+        LabjackReader
+            A new instance of a LabjackReader.
 
+        Raises
+        ------
+        LJMError
+            If the LJM library cannot open a connection.
+        TypeError
+            If the type of an input is invalid.
+        ValueError
+            If a value provided as an argument is invalid.
         """
-        # Handle if we were given bad args to initialize on.
-        if not isinstance(device_type, str):
-            raise TypeError("device_type error: expected a string instead"
-                            " of %s."
-                            % str(type(device_type)))
-        if device_type not in ["T7", "T4", "ANY"]:
-            raise ValueError("Expected device type to be either \"T7\","
-                             " \"T4\", or \"ANY\"")
-        if not isinstance(connection_type, str):
-            raise TypeError("connection_type error: expected a string instead"
-                            " of %s."
-                            % str(type(connection_type)))
-        if connection_type not in ["USB", "ETHERNET", "WIFI", "ANY"]:
-            raise ValueError("Expected connection type to be either"
-                             "\"USB\", \"ETHERNET\", \"WIFI\", or \"ANY\"")
-        if not isinstance(device_identifier, str):
-            raise TypeError("device_identifier error: expected a string"
-                            " instead of %s."
-                            % str(type(device_identifier)))
-
-        self.type, self.connection = device_type, connection_type
-        self.id = device_identifier
+        ljm_reference.connection_open(device_type, connection_type,
+                                      device_identifier)
+        self.device_type, self.connection_type = device_type, connection_type
+        self.device_identifier = device_identifier
 
     def __str__(self):
         return self.__repr__() + " Max packet size in bytes: %i" \
@@ -425,6 +635,74 @@ class LabjackReader(object):
             " 'IP': %s, 'Port': %i)" \
             % (self.meta_device, self.meta_connection, self.meta_serial_number,
                self.meta_ip_addr, self.meta_port)
+
+    @property
+    def connection_status(self):
+        """
+        Get the status of the connection to the LabJack
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        connection_open: bool
+            True if the connection is open
+            False if the connection is closed/does not exist
+
+        """
+        return self.connection_open
+
+    @property
+    def max_row(self) -> int:
+        """
+        Return the number of the last row that currently exists.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        row: int
+            The number of the last row recorded in the data array,
+            or -1 on error
+        """
+        if self.max_index < 1:
+            return -1
+        # Else...
+        return int(self.max_index / (len(self.input_channels) + 1))
+
+    @property
+    def max_index(self) -> int:
+        """
+        Return the largest index value that has been filled.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        max_index: int
+            The index of the latest value that has been recorded.
+
+        """
+        if self._max_index is not None and self._max_index:
+            return self._max_index
+        else:
+            return -1
+
+    @max_index.setter
+    def max_index(self, value: int) -> None:
+        if not isinstance(value, int):
+            raise TypeError("Invalid type provided.")
+        if value < -1:
+            raise ValueError("Invalid value provided, must be greater than or"
+                             " equal to -1.")
+
+        self._max_index = value
 
     def modify_settings(self, **kwargs):
         """
@@ -596,7 +874,6 @@ class LabjackReader(object):
         """
 
         # Initialize variables that we'll populate with results
-        # TODO: Remove
         packet_data = (ctypes.c_double * ljm_reference.ljm_buffer[self.handle])()
         device_buffer_backlog = ctypes.c_int32(0)
         ljm_buffer_backlog = ctypes.c_int32(0)
@@ -622,65 +899,6 @@ class LabjackReader(object):
         return packet_data, device_buffer_backlog.value, \
             ljm_buffer_backlog.value
 
-    def get_connection_status(self):
-        """
-        Get the status of the connection to the LabJack
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        connection_open: bool
-            True if the connection is open
-            False if the connection is closed/does not exist
-
-        """
-        return self.connection_open
-
-    def get_max_row(self) -> int:
-        """
-        Return the number of the last row that currently exists.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        row: int
-            The number of the last row recorded in the data array,
-            or -1 on error
-        """
-        if not len(self.input_channels):
-            raise Exception("No channels have been declared")
-        max_index = self.get_max_data_index()
-
-        if max_index < 1:
-            return -1
-        # Else...
-        return int(max_index/(len(self.input_channels) + 1))
-
-    def get_max_data_index(self) -> int:
-        """
-        Return the largest index value that has been filled.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        max_index: int
-            The index of the latest value that has been recorded.
-
-        """
-        if self.max_index is not None and self.max_index:
-            return self.max_index
-        else:
-            return -1
-
     def _reshape_data(self, from_row: int, to_row: int):
         """
         Get a range of rows from the recorded data
@@ -698,10 +916,10 @@ class LabjackReader(object):
             A 2D array, starting at from_row, of data points, where
             every row is one data point across all channels.
         """
-        if (self.data_arr is not None and self.get_max_data_index() != -1
+        if (self.data_arr is not None and self.max_index != -1
            and from_row >= 0):
             row_width = len(self.input_channels) + 2
-            max_index = min(self.get_max_data_index(), row_width * to_row)
+            max_index = min(self.max_index, row_width * to_row)
 
             start_index = from_row * row_width
 
@@ -711,140 +929,11 @@ class LabjackReader(object):
         # Else...
         return None
 
-    def to_list(self, mode="all", **kwargs) -> Union[List[List[float]], None]:
-        """
-        Return data in latest array.
-
-        Parameters
-        ----------
-        mode: str, optional
-            Valid options are
-            'all': Get all data.
-            'relative': Expects you to use the kwarg num_rows=n, with n as the
-                        number of rows to retrieve relative to the end.
-            'range': Retrieves a range of rows. Expects the kwargs 'start'
-                     and 'end'.
-
-        Returns
-        -------
-        array_like: ndarray
-            A 2D array in the shape (ceil(1d data len/ (number of channels + 2),
-                                     number of channels + 2)
-            Final two columns are the LabJack device's time in nanoseconds, and
-            the host system's time, also in nanoseconds.
-
-        Examples
-        --------
-        Create a reader for a Labjack T7 and read off 60.5 seconds of data at
-        50 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
-        each.
-
-        >>> reader = LabjackReader("T7")
-        >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
-        >>> # Return all the data we collected.
-        >>> reader.to_list(mode='all')
-        [[.....]
-         [.....]
-         [.....]
-        ...
-        [.....]
-        [.....]
-        [.....]]
-        >>> # Return the last 50 rows of data we collected.
-        >>> reader.to_list(mode='relative', num_rows=50)
-        [[.....]
-         [.....]
-         [.....]
-        ...
-        [.....]
-        [.....]
-        [.....]]
-        >>> # Return rows 17 through 65, inclusive, of the collected data.
-        >>> reader.to_list(mode='range', start=17, end=65)
-        [[.....]
-         [.....]
-         [.....]
-        ...
-        [.....]
-        [.....]
-        [.....]]
-
-        Notes
-        -----
-        If the internal data array has not been initialized yet, the return
-        value of this function will be None.
-        """
-        max_row = self.get_max_data_index()
-        if max_row < 0:
-            return None
-
-        row_width = len(self.input_channels) + 2
-        max_row = int(max_row / row_width)
-
-        if mode == "all" or mode == 'all':
-            return self._reshape_data(0, max_row)
-        elif mode == "range" or mode == 'range':
-            if "start" in kwargs and "end" in kwargs:
-                from_range, to_range = kwargs["start"], kwargs["end"]
-                if 0 <= from_range < to_range:
-                    return self._reshape_data(from_range, to_range)
-                else:
-                    raise Exception("Invalid range provided of [%d, %d]"
-                                    % (from_range, to_range))
-            else:
-                raise Exception("The kwargs \"start\" and \"end\" must"
-                                " be specified in range mode.")
-        elif mode == "relative" or mode == 'relative':
-            if "num_rows" in kwargs:
-                if kwargs["num_rows"] < 0:
-                    raise Exception("Invalid number of rows provided")
-                else:
-                    return self._reshape_data(max_row - kwargs["num_rows"],
-                                              max_row)
-            else:
-                raise Exception("Number of rows must be specified in"
-                                " relative mode.")
-
-    def to_dataframe(self, mode="all", **kwargs):
-        """
-        Gets this object's recorded data in dataframe form.
-
-        Parameters
-        ----------
-        mode: str, optional
-            Valid options are
-            'all': Get all data.
-            'relative': Expects you to use the kwarg num_rows=n, with n as the
-                        number of rows to retrieve relative to the end.
-            'range': Retrieves a range of rows. Expects the kwargs 'start'
-                     and 'end'.
-
-        Returns
-        -------
-        table: dataframe
-            A Pandas Dataframe with the following columns:
-            AINB....AINC: Voltage values for the user-specified channels
-                          AIN #B to #C.
-            Time:  Recorded time (in nanoseconds) of datapoints in row, as
-                   observed by the LabJack
-            System Time: Recorded time (in nanoseconds) of datapoints in
-                         row, as observed by the host computer
-
-        Notes
-        -----
-        If the internal data array has not been initialized yet, behavior
-        is undefined.
-        """
-
-        return pd.DataFrame(self.to_list(mode, **kwargs),
-                            columns=self.input_channels
-                            + ["Time", "System Time"])
-
     def _open_connection(self, verbose=True) -> None:
         """
         Open a streaming connection to the LabJack.
 
-        Parameters
+        Parameterscollect_data
         ----------
         None
 
@@ -855,16 +944,9 @@ class LabjackReader(object):
         """
         if not self.connection_open:
             # Open our device.
-            temp_handle = ctypes.c_int32(0)
-
-            error = ljm_reference.staticlib \
-                .LJM_OpenS(self.type.encode("ascii"),
-                           self.connection.encode("ascii"),
-                           str(self.id).encode("ascii"),
-                           ctypes.byref(temp_handle))
-            if error != ljm_errorcodes.NOERROR:
-                raise LJMError(error)
-            self.handle = temp_handle.value
+            self.handle = ljm_reference.connection_open(self.device_type,
+                                                        self.connection_type,
+                                                        self.device_identifier)
             self.connection_open = True
 
             if verbose:
@@ -945,7 +1027,7 @@ class LabjackReader(object):
         # for individual analog inputs, but the stream has only one
         # settling time and resolution.
 
-        if self.type == "T7":
+        if self.device_type == "T7":
             # Ensure triggered stream is disabled.
             self.modify_settings(triggered_stream=None)
 
@@ -969,6 +1051,135 @@ class LabjackReader(object):
         # Configure and start stream
         return ljm_reference.stream_start(self.handle, inputs, scan_rate,
                                           scans_per_read), scans_per_read
+
+    def to_list(self, mode="all", **kwargs) -> Union[List[List[float]], None]:
+        """
+        Return data in latest array.
+
+        Parameters
+        ----------
+        mode: str, optional
+            Valid options are
+            'all': Get all data.
+            'relative': Expects you to use the kwarg num_rows=n, with n as the
+                        number of rows to retrieve relative to the end.
+            'range': Retrieves a range of rows. Expects the kwargs 'start'
+                     and 'end'.
+
+        Returns
+        -------
+        array_like: ndarray
+            A 2D array in the shape (ceil(1d data len/ (number of channels + 2),
+                                     number of channels + 2)
+            Final two columns are the LabJack device's time in nanoseconds, and
+            the host system's time, also in nanoseconds.
+
+        Examples
+        --------
+        Create a reader for a Labjack T7 and read off 60.5 seconds of data at
+        50 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
+        each.
+
+        >>> reader = LabjackReader("T7")
+        >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
+        >>> # Return all the data we collected.
+        >>> reader.to_list(mode='all')
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
+        >>> # Return the last 50 rows of data we collected.
+        >>> reader.to_list(mode='relative', num_rows=50)
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
+        >>> # Return rows 17 through 65, inclusive, of the collected data.
+        >>> reader.to_list(mode='range', start=17, end=65)
+        [[.....]
+         [.....]
+         [.....]
+        ...
+        [.....]
+        [.....]
+        [.....]]
+
+        Notes
+        -----
+        If the internal data array has not been initialized yet, the return
+        value of this function will be None.
+        """
+        max_row = self.max_index
+        if max_row < 0:
+            return None
+
+        row_width = len(self.input_channels) + 2
+        max_row = int(max_row / row_width)
+
+        if mode == "all" or mode == 'all':
+            return self._reshape_data(0, max_row)
+        elif mode == "range" or mode == 'range':
+            if "start" in kwargs and "end" in kwargs:
+                from_range, to_range = kwargs["start"], kwargs["end"]
+                if 0 <= from_range < to_range:
+                    return self._reshape_data(from_range, to_range)
+                else:
+                    raise Exception("Invalid range provided of [%d, %d]"
+                                    % (from_range, to_range))
+            else:
+                raise Exception("The kwargs \"start\" and \"end\" must"
+                                " be specified in range mode.")
+        elif mode == "relative" or mode == 'relative':
+            if "num_rows" in kwargs:
+                if kwargs["num_rows"] < 0:
+                    raise Exception("Invalid number of rows provided")
+                else:
+                    return self._reshape_data(max_row - kwargs["num_rows"],
+                                              max_row)
+            else:
+                raise Exception("Number of rows must be specified in"
+                                " relative mode.")
+
+    def to_dataframe(self, mode="all", **kwargs):
+        """
+        Gets this object's recorded data in dataframe form.
+
+        Parameters
+        ----------
+        mode: str, optional
+            Valid options are
+            'all': Get all data.
+            'relative': Expects you to use the kwarg num_rows=n, with n as the
+                        number of rows to retrieve relative to the end.
+            'range': Retrieves a range of rows. Expects the kwargs 'start'
+                     and 'end'.
+
+        Returns
+        -------
+        table: dataframe
+            A Pandas Dataframe with the following columns:
+            AINB....AINC: Voltage values for the user-specified channels
+                          AIN #B to #C.
+            Time:  Recorded time (in nanoseconds) of datapoints in row, as
+                   observed by the LabJack
+            System Time: Recorded time (in nanoseconds) of datapoints in
+                         row, as observed by the host computer
+
+        Notes
+        -----
+        If the internal data array has not been initialized yet, behavior
+        is undefined.
+        """
+
+        return pd.DataFrame(self.to_list(mode, **kwargs),
+                            columns=self.input_channels
+                            + ["Time", "System Time"])
 
     def find_max_freq(self,
                       inputs: List[str],
@@ -1303,7 +1514,7 @@ class LabjackReader(object):
                          ((float(self.max_index) / float(size)) * 100 if self.max_index else 0), ret[1], ret[2]))
 
             # Ensure that this packet won't overflow our buffer.
-            if self.max_index + ((len(curr_data) / step_size) * (2 + step_size)) > size:
+            if self._max_index + ((len(curr_data) / step_size) * (2 + step_size)) > size:
                 break
 
             for i in range(0, len(curr_data), step_size):
@@ -1315,15 +1526,15 @@ class LabjackReader(object):
                 curr_time = (scans_per_read / scan_rate) * (packet_num + (i / len(curr_data)))
 
                 # We get a giant 1D list back, so work with what we have.
-                self.data_arr[self.max_index: self.max_index + step_size] =\
+                self.data_arr[self._max_index: self._max_index + step_size] =\
                     curr_data[i:i + step_size]
-                self.max_index += step_size
+                self._max_index += step_size
 
                 # Put in the time as well
-                self.data_arr[self.max_index] = curr_time
-                self.max_index += 1
-                self.data_arr[self.max_index] = time_func() - start
-                self.max_index += 1
+                self.data_arr[self._max_index] = curr_time
+                self._max_index += 1
+                self.data_arr[self._max_index] = time_func() - start
+                self._max_index += 1
 
             packet_num += 1
 
