@@ -34,7 +34,7 @@ before_install:
       pip install pytest
     fi
     if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      sudo sh installers/install-linux.sh -t;
+      sudo -H sh installers/install-linux.sh -t;
     fi
 
 # command to install dependencies
