@@ -36,18 +36,18 @@ Multiple demonstrations of library functions are located in the `demos` folder. 
 ```python
 from labjackcontroller.labtools import LabjackReader
 
-myLabjack = LabjackReader("T7", connection_type="ETHERNET")
+duration = 10  # seconds
+frequency = 100  # Hz
+channels = ["AIN0"]
+voltages = [10.0]
 
-duration = 60  # Seconds
-scan_rate = 50000  # Hz
-max_channel_voltages = [10.0, 10.0]  # Volts
-channels = ["AIN0", "AIN1"]
 
-# Collect data from the above channels for 60 seconds.
-myLabjack.collect_data(channels, max_channel_voltages, duration, scan_rate)
+# Instantiate a LabjackReader
+with LabjackReader("T7") as my_lj:
+    my_lj.collect_data(channels, voltages, duration, frequency)
 
-# Get all data recorded as a 2D Numpy array
-my_data = myLabjack.to_list()
+    # Get all data recorded as a 2D Numpy array
+    my_data = myLabjack.to_list()
 ```
 
 ## Contributors
