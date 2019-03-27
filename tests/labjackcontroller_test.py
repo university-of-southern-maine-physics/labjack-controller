@@ -1,4 +1,5 @@
 import pytest
+import itertools
 import numpy as np
 from labjackcontroller.labtools import LabjackReader, ljm_reference
 
@@ -9,11 +10,16 @@ def get_ljm_devices():
 
 
 @pytest.fixture(scope='session')
+def ljm_all_channels():
+    channels = [*["AIN" + str(num) for num in range(0, 3)]]
+    return [subset for num_ch in range(1, len(channels) + 1)
+            for subset in itertools.combinations(channels, num_ch)]
+
+
+@pytest.fixture(scope='session')
 def get_init_parameters(get_ljm_devices):
         return [[*row[:3], None] for row in get_ljm_devices] + \
               [("ANY", "ANY", "ANY", None if len(get_ljm_devices) else Exception),
-               ('BAD', 'BAD', 'BAD', ValueError),
-               ('T4', 'BAD', 'BAD', ValueError),
                (123, 'USB', 'BAD', TypeError),
                ('T7', 123, 'BAD', TypeError),
                (['T7'], 'USB', 'BAD', TypeError)]
@@ -48,16 +54,66 @@ def test_connection_release(get_ljm_devices):
         LabjackReader(*device_args[:3])
 
 
-def test_open_close(get_ljm_devices):
+def test_open_close_status(get_ljm_devices):
     for device_args in get_ljm_devices:
         curr_device = LabjackReader(*device_args[:3])
 
         for i in range(0, 10):
-            curr_device._open_connection()
+            curr_device.open()
 
             assert curr_device.connection_status
 
-            curr_device._close_stream()
+            curr_device.close()
+
+
+@pytest.mark.parametrize("resolution", range(1, 8))
+@pytest.mark.parametrize("frequency", [10, 100, 1000])
+def test_collect_data_gathering(get_ljm_devices, ljm_all_channels, resolution,
+                                frequency):
+    # Duration of each test, in seconds.
+    duration = 10
+
+    for device_args in get_ljm_devices:
+        curr_device = LabjackReader(*device_args[:3])
+
+        for channel_config in ljm_all_channels:
+            # Iterate through some amount of channels.
+            tot_time, num_skips = curr_device \
+                .collect_data(channel_config,
+                              [10.0] * len(channel_config),
+                              duration, frequency,
+                              resolution=resolution,
+                              verbose=False)
+            device_shape = np.shape(curr_device.to_list(mode="all"))
+            expected_shape = (frequency * duration, len(channel_config) + 2)
+
+            assert device_shape == expected_shape
+            assert num_skips == 0
+            assert tot_time > duration - 0.01
+
+
+@pytest.mark.parametrize("inputs, inputs_max_voltages, seconds, scan_rate,"
+                         " scans_per_read, stream_setting, resolution,"
+                         " expected_err",
+                         [(["AIN0"], [10.0], 1, 1000, 500, 1, 1, None)])
+def test_collect_data_parameters(get_ljm_devices, inputs, inputs_max_voltages,
+                                 seconds, scan_rate, scans_per_read,
+                                 stream_setting, resolution, expected_err):
+    if expected_err:
+            with pytest.raises(expected_err):
+                with LabjackReader(*get_ljm_devices[0][:3]) as curr_device:
+                    curr_device.collect_data(inputs, inputs_max_voltages,
+                                             seconds, scan_rate,
+                                             scans_per_read=scans_per_read,
+                                             stream_setting=stream_setting,
+                                             resolution=resolution)
+    else:
+        with LabjackReader(*get_ljm_devices[0][:3]) as curr_device:
+            curr_device.collect_data(inputs, inputs_max_voltages,
+                                     seconds, scan_rate,
+                                     scans_per_read=scans_per_read,
+                                     stream_setting=stream_setting,
+                                     resolution=resolution)
 
 
 def test_to_list(get_ljm_devices):

@@ -1,26 +1,14 @@
 from labjackcontroller.labtools import LabjackReader
 
-device_type = "T7"
-duration = 300
-connection_type = "USB"
-channels = ["AIN0", "AIN1", "AIN2", "AIN3"]
-voltages = [10.0, 10.0, 10.0, 10.0]
+duration = 10  # seconds
+frequency = 100  # Hz
+channels = ["AIN0"]
+voltages = [10.0]
 
 
 # Instantiate a LabjackReader
-my_lj = LabjackReader(device_type, connection_type=connection_type)
+with LabjackReader("T7") as my_lj:
+    my_lj.collect_data(channels, voltages, duration, frequency)
 
-print(my_lj)
-
-freq, scans_per_read = 1000, 500 #my_lj.find_max_freq(channels, voltages, num_seconds=10)
-
-print(freq, scans_per_read)
-
-my_lj.realtime()
-
-data_proc = my_lj.collect_data(channels, voltages, duration, freq,
-                               resolution=1,
-                               scans_per_read=scans_per_read,
-                               verbose=False)
-
-print(my_lj.to_dataframe(mode="range", start=400, end=500))
+    # Get the data we collected.
+    print(my_lj.to_dataframe())
