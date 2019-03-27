@@ -99,6 +99,9 @@ def test_collect_data_gathering(get_ljm_devices, ljm_all_channels, resolution,
 def test_collect_data_parameters(get_ljm_devices, inputs, inputs_max_voltages,
                                  seconds, scan_rate, scans_per_read,
                                  stream_setting, resolution, expected_err):
+    if not len(get_ljm_devices):
+        return
+
     if expected_err:
             with pytest.raises(expected_err):
                 with LabjackReader(*get_ljm_devices[0][:3]) as curr_device:
@@ -131,9 +134,11 @@ def test_to_list(get_ljm_devices):
         # Should return back our 1 data column and 2 time columns.
         assert np.shape(curr_device.to_list(mode="all")) == (10, 3)
 
-        assert np.shape(curr_device.to_list(mode='relative', num_rows=5)) == (5, 3)
+        assert np.shape(curr_device
+                        .to_list(mode='relative', num_rows=5)) == (5, 3)
 
-        assert np.shape(curr_device.to_list(mode='range', start=2, end=4)) == (2, 3)
+        assert np.shape(curr_device
+                        .to_list(mode='range', start=2, end=4)) == (2, 3)
 
         # The following should fail.
         with pytest.raises(Exception):
