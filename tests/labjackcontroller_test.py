@@ -19,7 +19,7 @@ def ljm_all_channels():
 @pytest.fixture(scope='session')
 def get_init_parameters(get_ljm_devices):
         return [[*row[:3], None] for row in get_ljm_devices] + \
-              [("ANY", "ANY", "ANY", None if len(get_ljm_devices) else Exception),
+              [("ANY", "ANY", "ANY", None),
                (123, 'USB', 'BAD', TypeError),
                ('T7', 123, 'BAD', TypeError),
                (['T7'], 'USB', 'BAD', TypeError)]
