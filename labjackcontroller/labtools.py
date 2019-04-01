@@ -1391,6 +1391,8 @@ class LabjackReader(object):
                            (Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET) + str(ljm_buffer_size) + Fore.RESET,
                            (Fore.RED if num_skips > 0 else Fore.RESET) + str(num_skips) + Fore.RESET))
 
+    # TODO: stream_setting needs to be renamed and abstracted away, see STREAM_SETTLING_US
+    # at https://labjack.com/support/datasheets/t-series/communication/stream-mode
     def collect_data(self,
                      inputs: List[str],
                      inputs_max_voltages: List[float],
