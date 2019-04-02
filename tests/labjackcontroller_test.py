@@ -11,7 +11,8 @@ def get_ljm_devices():
 
 @pytest.fixture(scope='session')
 def ljm_all_channels():
-    channels = [*["AIN" + str(num) for num in range(0, 3)]]
+    channels = [*["AIN" + str(num) for num in range(0, 3)],
+                *["DIO" + str(num) for num in range(0, 3)]]
     return [subset for num_ch in range(1, len(channels) + 1)
             for subset in itertools.combinations(channels, num_ch)]
 

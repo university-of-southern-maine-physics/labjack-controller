@@ -617,11 +617,9 @@ class LJMLibrary(metaclass=Singleton):
             setting = (b'LJM_ALLOWS_AUTO_MULTIPLE_FEEDBACKS' if kwarg is "multiple_feedbacks" else
                        b'LJM_OLD_FIRMWARE_CHECK' if kwarg is "ensure_updated" else
                        b'LJM_RETRY_ON_TRANSACTION_ID_MISMATCH' if kwarg is "retry_on_transaction_err" else
-                       "")
-#                    "LJM_SEND_RECEIVE_TIMEOUT_MS" \
-#                    if kwarg is "communication_timeout" else ""
+                       None)
 
-            if setting:
+            if setting is not None:
                 value = ctypes.c_double(1) if kwargs[kwarg] \
                     else ctypes.c_double(0)
                 try:
@@ -884,7 +882,7 @@ class LabjackReader(object):
                       " stream running.")
             pass
 
-    def _setup(self, inputs, inputs_max_voltages, stream_setting, resolution,
+    def _setup(self, inputs, inputs_max_voltages, stream_settling, resolution,
                scan_rate, scans_per_read=-1) -> Tuple[int, int]:
         """
         Set up a connection to the LabJack for streaming
@@ -897,7 +895,7 @@ class LabjackReader(object):
         inputs_max_voltages: sequence of real values
             Maximum voltages corresponding element-wise to the channels
             listed in inputs.
-        stream_setting: int, optional
+        stream_settling: int, optional
             See official LabJack documentation.
         resolution: int, optional
             See official LabJack documentation.
@@ -945,9 +943,14 @@ class LabjackReader(object):
         # If a packet is lost, don't try and get it again.
         ljm_reference.modify_settings(retry_on_transaction_err=False)
 
-        # When streaming, negative channels and ranges can be configured
-        # for individual analog inputs, but the stream has only one
-        # settling time and resolution.
+        # DO SPECIAL WORK FOR THE CHANNELS THAT ARE AIN.
+        # All negative channels are single-ended, AIN0 and AIN1 ranges are
+        # +/-10 V, stream settling is 0 (default) and stream resolution
+        # index is 0 (default).
+        ain_inputs = [chan for chan in inputs if chan.startswith("AIN")]
+
+        names = []
+        values = []
 
         if self.device_type == "T7":
             # Ensure triggered stream is disabled.
@@ -956,14 +959,14 @@ class LabjackReader(object):
             # Enabling internally-clocked stream.
             self.modify_settings(stream_clock="internal")
 
-        # All negative channels are single-ended, AIN0 and AIN1 ranges are
-        # +/-10 V, stream settling is 0 (default) and stream resolution
-        # index is 0 (default).
-        names = ("AIN_ALL_NEGATIVE_CH",
-                 *[element + "_RANGE" for element in inputs],
-                 "STREAM_SETTLING_US", "STREAM_RESOLUTION_INDEX")
-        values = (ljm_constants.GND, *inputs_max_voltages,
-                  stream_setting, resolution)
+            names.append("AIN_ALL_NEGATIVE_CH")
+            values.append(ljm_constants.GND)
+
+        names.extend([element + "_RANGE" for element in ain_inputs])
+        values.extend(inputs_max_voltages)
+
+        self.modify_settings(stream_settling_time=stream_settling,
+                             stream_resolution=resolution)
 
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
@@ -1062,6 +1065,18 @@ class LabjackReader(object):
                 "external": Use an external clock plugged into CIO3.
             stream_clock_divisor: int
                 Not Implemented
+            stream_settling_time: float
+                Time in microseconds to allow signals to settle.
+                Does not apply to the 1st channel in the scan list, as that
+                settling is controlled by scan rate. Is one of the following:
+                "auto": Automatically figure this parameter out. Results vary
+                        on device used.
+                0: No time. Is the LJM default setting.
+                float in (0, inf)
+            stream_resolution: int
+                Sets the stream resolution to the requested value.
+                Number of bits resolution varies depending on model.
+                Must be greater than or equal to zero.
             triggered_stream: str
                 T7 Only. Set to None if you don't want to start the stream
                 when an input is given to one of the FIO0 or FIO1 inputs.
@@ -1115,6 +1130,8 @@ class LabjackReader(object):
                 continue
 
             # Now, handle more complex operations.
+            error = ljm_errorcodes.NOERROR
+
             if kwarg is "triggered_stream":
                 if kwargs[kwarg] is None:
                     error = ljm_reference.staticlib \
@@ -1157,6 +1174,11 @@ class LabjackReader(object):
                             .LJM_eWriteName(self.handle,
                                             b'STREAM_CLOCK_SOURCE',
                                             ctypes.c_double(value))
+            elif kwarg is "stream_resolution":
+                error = ljm_reference.staticlib \
+                            .LJM_eWriteName(self.handle,
+                                            b'STREAM_RESOLUTION_INDEX',
+                                            ctypes.c_double(kwargs[kwarg]))
 
             # Finally, ensure we didn't get any errors trying to set our
             # configuration.
@@ -1399,8 +1421,8 @@ class LabjackReader(object):
                      seconds: float,
                      scan_rate: int,
                      scans_per_read=-1,
-                     stream_setting=0,
-                     resolution=8,
+                     stream_setting="auto",
+                     resolution=4,
                      verbose=False) -> Tuple[float, float]:
         """
         Collect data from the LabJack device.
@@ -1426,8 +1448,10 @@ class LabjackReader(object):
         scans_per_read : int, optional
             Number of data points contained in a packet sent by the LabJack
             device. -1 indicates the maximum possible sample rate.
-        stream_setting : int, optional
-            See official LabJack documentation.
+        stream_setting : float, optional
+            Time in microseconds to allow signals to settle.
+            Does not apply to the 1st channel in the scan list, as that
+            settling is controlled by scan rate. Must be "auto" or a float.
         resolution : int, optional
             See official LabJack documentation.
         verbose : str, optional
