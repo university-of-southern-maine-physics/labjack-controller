@@ -20,7 +20,7 @@ bibliography: paper.bib
 # Summary
 
 The ability to accurately collect and computationally process data from sensors
-in real time is crucial to many scientific experiments. Common solutions are
+in realtime is crucial to many scientific experiments. Common solutions are
 tools provided by National Instruments or internally developed tools. This can
 lead to cost-ineffective solutions often tied to proprietary analysis software
 or languages; in the case of internally developed tools, the onus is placed
@@ -30,11 +30,26 @@ multiple manufacturers to capture this market. These solutions tend to have
 cost-effective, versatile hardware, but interfaces that are poorly designed or
 immature.
 
-``labjack-controller`` is a package which targets T-series DAQs from LabJack,
-and is designed to provide a powerful thread-safe facade representation of
-these devices. It focuses on providing functions that abstract and automate
-data collection, error handling, and configuration proceedures that are
-normally exceedingly nuanced or complex. Care was given to writing efficient
-code for streaming data from and communicating to these devices, relying
-heavily on C foreign functions, and interfacing directly with Labjack's
-C interface.
+``labjack-controller`` is a Python package which targets T-series DAQs from
+LabJack, and is designed to provide a powerful thread-safe facade
+representation of these devices. It focuses on providing functions that
+abstract and automate data collection, error handling, and configuration
+procedures that are normally exceedingly nuanced or complex. Care was given
+to writing efficient code for streaming data from and communicating to these
+devices, relying heavily on C foreign functions, and interact directly
+with Labjack's provided low-level C interface.
+
+``labjack-controller`` is designed to be used by anyone who has at least an
+introductory knowledge of Python and intends to involve a computer in the
+process of reading sensor data, from data backup purposes to real-time reaction
+to sensor readings. It is currently used in upper-level undergraduate physics
+courses at the University of Southern Maine for the purposes of reacting to
+realtime data, most notably with a torsion pendulum with dynamic electromagnetic
+dampening.
+
+# Acknowledgements
+
+We acknowledge funding through the University of Southern Maine.
+
+
+# References
