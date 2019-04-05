@@ -1,5 +1,5 @@
 ---
-title: 'labjack-controller: '
+title: 'labjack-controller: Fast Realtime Data Collection with Labjack T-Series DAQs in Python'
 tags:
   - Python
   - experimental
@@ -37,7 +37,9 @@ abstract and automate data collection, error handling, and configuration
 procedures that are normally exceedingly nuanced or complex. Care was given
 to writing efficient code for streaming data from and communicating to these
 devices, relying heavily on C foreign functions, and interact directly
-with Labjack's provided low-level C interface.
+with Labjack's provided low-level C interface. All functions are thread-safe,
+data associated with the facade can be shared between multiple processes with
+live updating.
 
 ``labjack-controller`` is designed to be used by anyone who has at least an
 introductory knowledge of Python and intends to involve a computer in the
