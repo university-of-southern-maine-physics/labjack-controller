@@ -1,6 +1,9 @@
 labjackcontroller package
 =========================
 
+Submodules
+----------
+
 labjackcontroller.labtools module
 ---------------------------------
 
