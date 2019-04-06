@@ -1,0 +1,4 @@
+# Requirements for building the docs
+Sphinx
+nbsphinx
+guzzle_sphinx_theme

@@ -12,9 +12,12 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))
+import guzzle_sphinx_theme
+
+sys.path.insert(0, os.path.abspath("../../.."))
 
 
 # -- Project information -----------------------------------------------------
@@ -40,8 +43,13 @@ release = '0.2.0'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.doctest',
+    'sphinx.ext.intersphinx',
     'sphinx.ext.coverage',
-    'numpydoc'
+    'sphinx.ext.mathjax',
+    'sphinx.ext.ifconfig',
+    'sphinx.ext.napoleon',
+    'nbsphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -61,7 +69,7 @@ master_doc = 'index'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "Python"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -74,16 +82,18 @@ pygments_style = None
 
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
-html_theme = 'alabaster'
+# The theme to use for HTML and HTML Help pages.
+html_translator_class = 'guzzle_sphinx_theme.HTMLTranslator'
+html_theme_path = guzzle_sphinx_theme.html_theme_path()
+html_theme = 'guzzle_sphinx_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#
-# html_theme_options = {}
+html_theme_options = {
+    # Set the name of the project to appear in the sidebar
+    "project_nav_name": "labjack-controller",
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -98,7 +108,9 @@ html_static_path = ['_static']
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
 #
-# html_sidebars = {}
+html_sidebars = {
+    '**': ['logo-text.html', 'globaltoc.html', 'searchbox.html']
+}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -177,3 +189,8 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+
+# -- Options for intersphinx extension ---------------------------------------
+
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {'https://docs.python.org/': None}
