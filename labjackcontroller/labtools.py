@@ -342,7 +342,7 @@ class LJMLibrary(metaclass=Singleton):
         port = ctypes.c_int32(0)
         max_packet_size = ctypes.c_int32(0)
 
-        error = ljm_reference.staticlib\
+        error = self._ljm_reference.staticlib\
             .LJM_GetHandleInfo(handle,
                                ctypes.byref(device_type),
                                ctypes.byref(connection_type),
@@ -692,9 +692,6 @@ class LJMLibrary(metaclass=Singleton):
                 continue
 
 
-ljm_reference = LJMLibrary()
-
-
 class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
@@ -712,6 +709,8 @@ class LabjackReader(object):
     _handle = -1
 
     _connection_open = False
+
+    _ljm_reference = LJMLibrary()
 
     # For administrative purposes, we will also keep track of the
     # self-reported metadata of this device.
@@ -811,7 +810,7 @@ class LabjackReader(object):
             self._meta_device, self._meta_connection, \
                 self._meta_serial_number, self._meta_ip_addr, \
                 self._meta_port, self._meta_max_packet_size = \
-                ljm_reference.connection_info(self._handle)
+                self._ljm_reference.connection_info(self._handle)
 
         return "LabjackReader('Type': %s, Connection': %s, 'Serial': %i," \
             " 'IP': %s, 'Port': %i)" \
@@ -931,7 +930,7 @@ class LabjackReader(object):
         """
         try:
             # Try to close the stream
-            ljm_reference.stream_stop(self._handle)
+            self._ljm_reference.stream_stop(self._handle)
             self._connection_open = False
             if verbose:
                 print("\nStream stopped.")
@@ -1001,7 +1000,7 @@ class LabjackReader(object):
             scans_per_read = scan_rate
 
         # If a packet is lost, don't try and get it again.
-        ljm_reference.modify_settings(retry_on_transaction_err=False)
+        self._ljm_reference.modify_settings(retry_on_transaction_err=False)
 
         # DO SPECIAL WORK FOR THE CHANNELS THAT ARE AIN.
         # All negative channels are single-ended, AIN0 and AIN1 ranges are
@@ -1034,7 +1033,7 @@ class LabjackReader(object):
         ljm.eWriteNames(self._handle, num_frames, names, values)
 
         # Configure and start stream
-        return ljm_reference.stream_start(self._handle, inputs, scan_rate,
+        return self._ljm_reference.stream_start(self._handle, inputs, scan_rate,
                                           scans_per_read), scans_per_read
 
     def open(self, verbose=True) -> None:
@@ -1055,7 +1054,7 @@ class LabjackReader(object):
         """
         if not self._connection_open:
             # Open our device.
-            self._handle = ljm_reference.connection_open(self.device_type,
+            self._handle = self._ljm_reference.connection_open(self.device_type,
                                                          self.connection_type,
                                                          self.device_identifier)
             self._connection_open = True
@@ -1078,7 +1077,7 @@ class LabjackReader(object):
 
         """
         self._close_stream()
-        ljm_reference.connection_close(self._handle)
+        self._ljm_reference.connection_close(self._handle)
         self._connection_open = False
 
     def modify_settings(self, **kwargs):
@@ -1188,7 +1187,7 @@ class LabjackReader(object):
             if setting:
                 value = ctypes.c_double(1) if kwargs[setting] \
                     else ctypes.c_double(0)
-                error = ljm_reference.staticlib \
+                error = self._ljm_reference.staticlib \
                     .LJM_eWriteName(self._handle, setting, value)
                 if error != ljm_errorcodes.NOERROR:
                     raise LJMError(error)
@@ -1199,7 +1198,7 @@ class LabjackReader(object):
 
             if kwarg == "triggered_stream":
                 if kwargs[kwarg] is None:
-                    error = ljm_reference.staticlib \
+                    error = self._ljm_reference.staticlib \
                         .LJM_eWriteName(self._handle,
                                         b'STREAM_TRIGGER_INDEX',
                                         ctypes.c_double(0))
@@ -1215,7 +1214,7 @@ class LabjackReader(object):
                              0)
                     if value:
                         # Write the corresponding value.
-                        error = ljm_reference.staticlib \
+                        error = self._ljm_reference.staticlib \
                             .LJM_eWriteName(self._handle,
                                             b'STREAM_TRIGGER_INDEX',
                                             ctypes.c_double(value))
@@ -1235,12 +1234,12 @@ class LabjackReader(object):
                     raise ValueError("Expected an argument that was either"
                                      "\"internal\" or \"external\"")
                 else:
-                    error = ljm_reference.staticlib \
+                    error = self._ljm_reference.staticlib \
                             .LJM_eWriteName(self._handle,
                                             b'STREAM_CLOCK_SOURCE',
                                             ctypes.c_double(value))
             elif kwarg == "stream_resolution":
-                error = ljm_reference.staticlib \
+                error = self._ljm_reference.staticlib \
                             .LJM_eWriteName(self._handle,
                                             b'STREAM_RESOLUTION_INDEX',
                                             ctypes.c_double(kwargs[kwarg]))
@@ -1396,7 +1395,7 @@ class LabjackReader(object):
                 while time.time() - start < num_seconds:
                     # Read all rows of data off of the latest packet
                     # in the stream.
-                    ret = ljm_reference.stream_read(self._handle)
+                    ret = self._ljm_reference.stream_read(self._handle)
                     buffer_size = ret[1]
                     ljm_buffer_size = max(ljm_buffer_size, ret[2])
 
@@ -1607,7 +1606,7 @@ class LabjackReader(object):
         start = _time_func()
         while self.max_index < size:
             # Read all rows of data off of the latest packet in the stream.
-            ret = ljm_reference.stream_read(self._handle)
+            ret = self._ljm_reference.stream_read(self._handle)
             curr_data = ret[0]
 
             if verbose:
