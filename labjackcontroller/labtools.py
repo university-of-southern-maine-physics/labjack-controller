@@ -16,9 +16,39 @@ from ctypes import c_int32
 from colorama import init, Fore
 init()
 
+"""
+A module that provides multiple classes and tools to configure and control
+Labjack T-series devices.
+"""
+
 
 def calculate_max_speed(device: str, num_channels: int, gain: int,
                         resolution: int) -> float:
+    """
+    Function that, given the stream initialization parameters of
+    a LJM device, can provide the official specification for the
+    maximum frequency the stream can run at.
+
+    Parameters
+    ----------
+    device : str
+        A string representation of an LJM device, such as "T4"
+    num_channels : int
+        The number of channels to be read during a stream.
+    gain : int
+        The voltage mode data will be read at, e.g. 10v, 100v, etc.
+        See the manufacturer's documentation for your device.
+    resolution : int
+        A value assigned by the manufacturer to reflect different levels
+        of precision. See the manufacturer's documentation for your device.
+
+    Returns
+    -------
+    float
+        The maximum frequency the given device is designed to scan at, given
+        the resolution and number of channels.
+
+    """
     # Values derived from
     # https://labjack.com/support/datasheets/t-series/appendix-a-1
     if device == "T7":
@@ -79,11 +109,11 @@ def calculate_max_speed(device: str, num_channels: int, gain: int,
         return -1
 
 
-def time_ns_func():
+def _time_ns_func():
     return time.time_ns() / 1e9
 
 
-time_func = time.time if sys.version_info < (3, 7, 0) else time_ns_func
+_time_func = time.time if sys.version_info < (3, 7, 0) else _time_ns_func
 
 
 class Singleton(type):
@@ -97,10 +127,19 @@ class Singleton(type):
 
 
 class LJMLibrary(metaclass=Singleton):
+    """
+    A singleton class that interfaces with Labjack's LJM C wrapper. Used to
+    support the LabjackReader's functionality.
+
+    Attributes
+    ----------
+    staticlib : Union[ctypes.WinDLL, ctypes.CDLL]
+        A reference to the functions provided in the LJM C wrapper.
+    """
     # Base reference to the staticlib.
     staticlib = None
-    ljm_buffer = {}
-    ljm_is_open = {}
+    _ljm_buffer = {}
+    _ljm_is_open = {}
 
     def __init__(self):
         os_is = sys.platform.startswith
@@ -151,11 +190,11 @@ class LJMLibrary(metaclass=Singleton):
             stream initialization has not happened or was originally not
             successful.
         """
-        if stream_mode and handle not in self.ljm_buffer:
+        if stream_mode and handle not in self._ljm_buffer:
             raise KeyError("Cannot find handle %s in the collection of known"
                            " connections.")
 
-        if not self.ljm_is_open[handle]:
+        if not self._ljm_is_open[handle]:
             raise Exception("The connection for this device is not open.")
 
     def _num_to_ipv4(self, num: int) -> str:
@@ -228,7 +267,7 @@ class LJMLibrary(metaclass=Singleton):
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
-        self.ljm_is_open[handle] = False
+        self._ljm_is_open[handle] = False
 
     def connection_close_all(self):
         """
@@ -255,7 +294,7 @@ class LJMLibrary(metaclass=Singleton):
             raise LJMError(error)
 
         # Empty the dict.
-        self.ljm_is_open.clear()
+        self._ljm_is_open.clear()
 
     def connection_info(self, handle: int):
         """
@@ -400,11 +439,31 @@ class LJMLibrary(metaclass=Singleton):
             raise LJMError(error)
 
         # Note that the connection is now open.
-        self.ljm_is_open[temp_handle.value] = True
+        self._ljm_is_open[temp_handle.value] = True
 
         return temp_handle.value
 
-    def list_all(self) -> Tuple[str, str, str, str]:
+    def list_all(self) -> List[Tuple[str, str, str, str]]:
+        """
+        Finds all LJM devices connected via any method to the host.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        List[Tuple[str, str, str, str]]
+            A list of device intitialization parameters to the devices found,
+            where each tuple sequentially lists the device name, connection
+            type, serial number, and IP address of a given connected device.
+
+        Raises
+        ------
+        LJMError
+            If the LJM library is forbidden from finding out if there are any
+            devices attached.
+        """
         num_found = ctypes.c_int32(0)
         dev_types = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
         conn_types = (ctypes.c_int32 * ljm_constants.LIST_ALL_SIZE)()
@@ -480,7 +539,7 @@ class LJMLibrary(metaclass=Singleton):
         self._validate_handle(handle, stream_mode=True)
 
         # Initialize variables that we'll populate with results
-        packet_data = (ctypes.c_double * self.ljm_buffer[handle])()
+        packet_data = (ctypes.c_double * self._ljm_buffer[handle])()
         dev_buffer_backlog = ctypes.c_int32(0)
         ljm_buffer_backlog = ctypes.c_int32(0)
 
@@ -535,7 +594,7 @@ class LJMLibrary(metaclass=Singleton):
         scan_rate = ctypes.c_double(scan_rate)
         num_addrs = len(scan_list)
         scan_list = self._names_to_modbus_addresses(scan_list)
-        self.ljm_buffer[handle] = scans_per_read * num_addrs
+        self._ljm_buffer[handle] = scans_per_read * num_addrs
 
         error = self.staticlib.LJM_eStreamStart(handle,
                                                 c_int32(scans_per_read),
@@ -576,7 +635,7 @@ class LJMLibrary(metaclass=Singleton):
 
         self._validate_handle(handle, stream_mode=True)
 
-        del self.ljm_buffer[handle]
+        del self._ljm_buffer[handle]
 
         error = self.staticlib.LJM_eStreamStop(handle)
         if error != ljm_errorcodes.NOERROR:
@@ -591,6 +650,7 @@ class LJMLibrary(metaclass=Singleton):
         ----------
         **kwargs
             A LJM library setting. Is from the following:
+
             ensure_updated: bool
                 Whether or not the LJM will check if the current Labjack
                 device is using the latest firmware.
@@ -639,28 +699,28 @@ class LabjackReader(object):
     """A class designed to represent an arbitrary LabJack device."""
 
     # Keep track of the input channels we're reading.
-    input_channels = []
+    _input_channels = []
 
     # Declare a data storage handle, is a ctypes.c_int with some number
     # (in other words, is a C array)
-    data_arr = None
+    _data_arr = None
 
     # Also, specify the largest index that is populated.
     _max_index = 0
 
     # There will be an int handle for the LabJack device
-    handle = -1
+    _handle = -1
 
-    connection_open = False
+    _connection_open = False
 
     # For administrative purposes, we will also keep track of the
     # self-reported metadata of this device.
-    meta_device = None
-    meta_connection = None
-    meta_serial_number = 0
-    meta_ip_addr = None
-    meta_port = 0
-    meta_max_packet_size = 0
+    _meta_device = None
+    _meta_connection = None
+    _meta_serial_number = 0
+    _meta_ip_addr = None
+    _meta_port = 0
+    _meta_max_packet_size = 0
 
     def __init__(self,
                  device_type: str,
@@ -735,28 +795,28 @@ class LabjackReader(object):
 
     def __str__(self):
         return self.__repr__() + " Max packet size in bytes: %i" \
-               % (self.meta_max_packet_size)
+               % (self._meta_max_packet_size)
 
     def __repr__(self):
         # Make sure we have a connection open.
         self.open(verbose=False)
 
         # If we don't have enough metadata abut this device, get it.
-        if not (self.meta_device and self.meta_connection
-                and self.meta_serial_number
-                and self.meta_ip_addr
-                and self.meta_port
-                and self.meta_max_packet_size):
+        if not (self._meta_device and self._meta_connection
+                and self._meta_serial_number
+                and self._meta_ip_addr
+                and self._meta_port
+                and self._meta_max_packet_size):
 
-            self.meta_device, self.meta_connection, \
-                self.meta_serial_number, self.meta_ip_addr, \
-                self.meta_port, self.meta_max_packet_size = \
-                ljm_reference.connection_info(self.handle)
+            self._meta_device, self._meta_connection, \
+                self._meta_serial_number, self._meta_ip_addr, \
+                self._meta_port, self._meta_max_packet_size = \
+                ljm_reference.connection_info(self._handle)
 
         return "LabjackReader('Type': %s, Connection': %s, 'Serial': %i," \
             " 'IP': %s, 'Port': %i)" \
-            % (self.meta_device, self.meta_connection, self.meta_serial_number,
-               self.meta_ip_addr, self.meta_port)
+            % (self._meta_device, self._meta_connection, self._meta_serial_number,
+               self._meta_ip_addr, self._meta_port)
 
     @property
     def connection_status(self):
@@ -774,7 +834,7 @@ class LabjackReader(object):
             False if the connection is closed/does not exist
 
         """
-        return self.connection_open
+        return self._connection_open
 
     @property
     def max_row(self) -> int:
@@ -794,7 +854,7 @@ class LabjackReader(object):
         if self.max_index < 1:
             return -1
         # Else...
-        return int(self.max_index / (len(self.input_channels) + 1))
+        return int(self.max_index / (len(self._input_channels) + 1))
 
     @property
     def max_index(self) -> int:
@@ -843,14 +903,14 @@ class LabjackReader(object):
             A 2D array, starting at from_row, of data points, where
             every row is one data point across all channels.
         """
-        if (self.data_arr is not None and self.max_index != -1
+        if (self._data_arr is not None and self.max_index != -1
            and from_row >= 0):
-            row_width = len(self.input_channels) + 2
+            row_width = len(self._input_channels) + 2
             max_index = min(self.max_index, row_width * to_row)
 
             start_index = from_row * row_width
 
-            return np.array(self.data_arr[start_index:max_index]) \
+            return np.array(self._data_arr[start_index:max_index]) \
                 .reshape((ceil((max_index - start_index) / row_width),
                          row_width))
         # Else...
@@ -871,8 +931,8 @@ class LabjackReader(object):
         """
         try:
             # Try to close the stream
-            ljm_reference.stream_stop(self.handle)
-            self.connection_open = False
+            ljm_reference.stream_stop(self._handle)
+            self._connection_open = False
             if verbose:
                 print("\nStream stopped.")
         except Exception:
@@ -971,10 +1031,10 @@ class LabjackReader(object):
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
         num_frames = len(names)
-        ljm.eWriteNames(self.handle, num_frames, names, values)
+        ljm.eWriteNames(self._handle, num_frames, names, values)
 
         # Configure and start stream
-        return ljm_reference.stream_start(self.handle, inputs, scan_rate,
+        return ljm_reference.stream_start(self._handle, inputs, scan_rate,
                                           scans_per_read), scans_per_read
 
     def open(self, verbose=True) -> None:
@@ -993,12 +1053,12 @@ class LabjackReader(object):
         None
 
         """
-        if not self.connection_open:
+        if not self._connection_open:
             # Open our device.
-            self.handle = ljm_reference.connection_open(self.device_type,
-                                                        self.connection_type,
-                                                        self.device_identifier)
-            self.connection_open = True
+            self._handle = ljm_reference.connection_open(self.device_type,
+                                                         self.connection_type,
+                                                         self.device_identifier)
+            self._connection_open = True
 
             if verbose:
                 print(self)
@@ -1018,8 +1078,8 @@ class LabjackReader(object):
 
         """
         self._close_stream()
-        ljm_reference.connection_close(self.handle)
-        self.connection_open = False
+        ljm_reference.connection_close(self._handle)
+        self._connection_open = False
 
     def modify_settings(self, **kwargs):
         """
@@ -1030,6 +1090,7 @@ class LabjackReader(object):
         ----------
         **kwargs
             A device setting. Is from the following:
+
             ain_on: bool
                 Set to True if you want the AIN analog inputs to be avalible,
                 else set to False. Setting is T7-specific, will be ignored on
@@ -1065,14 +1126,18 @@ class LabjackReader(object):
                 "external": Use an external clock plugged into CIO3.
             stream_clock_divisor: int
                 Not Implemented
-            stream_settling_time: float
+            stream_settling_time: Union[str, float]
                 Time in microseconds to allow signals to settle.
                 Does not apply to the 1st channel in the scan list, as that
                 settling is controlled by scan rate. Is one of the following:
-                "auto": Automatically figure this parameter out. Results vary
-                        on device used.
-                0: No time. Is the LJM default setting.
+
+                "auto"
+                    Automatically figure this parameter out. Results vary
+                    on device used.
+                0
+                    No time. Is the LJM default setting.
                 float in (0, inf)
+                    Actual time to wait.
             stream_resolution: int
                 Sets the stream resolution to the requested value.
                 Number of bits resolution varies depending on model.
@@ -1110,21 +1175,21 @@ class LabjackReader(object):
 
         for kwarg in kwargs:
             # Handle boolean settings first.
-            setting = (b'POWER_AIN' if kwarg is "ain_on" else
-                        b'POWER_AIN_DEFAULT' if kwarg is "ain_on_default" else
-                        b'POWER_ETHERNET' if kwarg is "ethernet_on" else
-                        b'POWER_ETHERNET_DEFAULT' if kwarg is "ethernet_on_default" else
-                        b'POWER_LED' if kwarg is "led_on" else
-                        b'POWER_LED_DEFAULT' if kwarg is "led_on_default" else
-                        b'POWER_WIFI' if kwarg is "wifi_on" else
-                        b'POWER_WIFI_DEFAULT' if kwarg is "wifi_on_default" else
-                        "")
+            setting = (b'POWER_AIN' if kwarg == "ain_on" else
+                       b'POWER_AIN_DEFAULT' if kwarg == "ain_on_default" else
+                       b'POWER_ETHERNET' if kwarg == "ethernet_on" else
+                       b'POWER_ETHERNET_DEFAULT' if kwarg == "ethernet_on_default" else
+                       b'POWER_LED' if kwarg == "led_on" else
+                       b'POWER_LED_DEFAULT' if kwarg == "led_on_default" else
+                       b'POWER_WIFI' if kwarg == "wifi_on" else
+                       b'POWER_WIFI_DEFAULT' if kwarg == "wifi_on_default" else
+                       "")
 
             if setting:
                 value = ctypes.c_double(1) if kwargs[setting] \
                     else ctypes.c_double(0)
                 error = ljm_reference.staticlib \
-                    .LJM_eWriteName(self.handle, setting, value)
+                    .LJM_eWriteName(self._handle, setting, value)
                 if error != ljm_errorcodes.NOERROR:
                     raise LJMError(error)
                 continue
@@ -1132,26 +1197,26 @@ class LabjackReader(object):
             # Now, handle more complex operations.
             error = ljm_errorcodes.NOERROR
 
-            if kwarg is "triggered_stream":
+            if kwarg == "triggered_stream":
                 if kwargs[kwarg] is None:
                     error = ljm_reference.staticlib \
-                        .LJM_eWriteName(self.handle,
+                        .LJM_eWriteName(self._handle,
                                         b'STREAM_TRIGGER_INDEX',
                                         ctypes.c_double(0))
                 elif isinstance(kwargs[kwarg], str):
-                    value = (2000 if kwargs[kwarg] is "DIO_EF0" else
-                             2001 if kwargs[kwarg] is "DIO_EF1" else
-                             2002 if kwargs[kwarg] is "DIO_EF2" else
-                             2003 if kwargs[kwarg] is "DIO_EF3" else
-                             2004 if kwargs[kwarg] is "DIO_EF4" else
-                             2005 if kwargs[kwarg] is "DIO_EF5" else
-                             2006 if kwargs[kwarg] is "DIO_EF6" else
-                             2007 if kwargs[kwarg] is "DIO_EF7" else
+                    value = (2000 if kwargs[kwarg] == "DIO_EF0" else
+                             2001 if kwargs[kwarg] == "DIO_EF1" else
+                             2002 if kwargs[kwarg] == "DIO_EF2" else
+                             2003 if kwargs[kwarg] == "DIO_EF3" else
+                             2004 if kwargs[kwarg] == "DIO_EF4" else
+                             2005 if kwargs[kwarg] == "DIO_EF5" else
+                             2006 if kwargs[kwarg] == "DIO_EF6" else
+                             2007 if kwargs[kwarg] == "DIO_EF7" else
                              0)
                     if value:
                         # Write the corresponding value.
                         error = ljm_reference.staticlib \
-                            .LJM_eWriteName(self.handle,
+                            .LJM_eWriteName(self._handle,
                                             b'STREAM_TRIGGER_INDEX',
                                             ctypes.c_double(value))
                         # TODO: LJM_STREAM_SCANS_RETURN_ALL? See
@@ -1162,21 +1227,21 @@ class LabjackReader(object):
                 else:
                     raise TypeError("Invalid argument. Expected a string"
                                     "in the range DIO_EF0....DIO_EF7")
-            elif kwarg is "stream_clock":
-                value = (0 if kwargs[kwarg] is "internal" else
-                         2 if kwargs[kwarg] is "external" else
+            elif kwarg == "stream_clock":
+                value = (0 if kwargs[kwarg] == "internal" else
+                         2 if kwargs[kwarg] == "external" else
                          -1)
                 if value == -1:
                     raise ValueError("Expected an argument that was either"
                                      "\"internal\" or \"external\"")
                 else:
                     error = ljm_reference.staticlib \
-                            .LJM_eWriteName(self.handle,
+                            .LJM_eWriteName(self._handle,
                                             b'STREAM_CLOCK_SOURCE',
                                             ctypes.c_double(value))
-            elif kwarg is "stream_resolution":
+            elif kwarg == "stream_resolution":
                 error = ljm_reference.staticlib \
-                            .LJM_eWriteName(self.handle,
+                            .LJM_eWriteName(self._handle,
                                             b'STREAM_RESOLUTION_INDEX',
                                             ctypes.c_double(kwargs[kwarg]))
 
@@ -1331,7 +1396,7 @@ class LabjackReader(object):
                 while time.time() - start < num_seconds:
                     # Read all rows of data off of the latest packet
                     # in the stream.
-                    ret = ljm_reference.stream_read(self.handle)
+                    ret = ljm_reference.stream_read(self._handle)
                     buffer_size = ret[1]
                     ljm_buffer_size = max(ljm_buffer_size, ret[2])
 
@@ -1413,7 +1478,8 @@ class LabjackReader(object):
                            (Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET) + str(ljm_buffer_size) + Fore.RESET,
                            (Fore.RED if num_skips > 0 else Fore.RESET) + str(num_skips) + Fore.RESET))
 
-    # TODO: stream_setting needs to be renamed and abstracted away, see STREAM_SETTLING_US
+    # TODO: stream_setting needs to be renamed and abstracted away, see
+    # STREAM_SETTLING_US
     # at https://labjack.com/support/datasheets/t-series/communication/stream-mode
     def collect_data(self,
                      inputs: List[str],
@@ -1528,7 +1594,7 @@ class LabjackReader(object):
                   % ("Time", "Max Index", "Total Indices", "%",
                      "Scans on Device", "Scans on LJM"))
 
-        self.input_channels = inputs
+        self._input_channels = inputs
 
         total_skip = 0  # Total skipped samples
 
@@ -1536,18 +1602,19 @@ class LabjackReader(object):
         self.max_index = 0
         step_size = len(inputs)
 
-        self.data_arr = (ctypes.c_double * size)(size)
+        self._data_arr = (ctypes.c_double * size)(size)
 
-        start = time_func()
+        start = _time_func()
         while self.max_index < size:
             # Read all rows of data off of the latest packet in the stream.
-            ret = ljm_reference.stream_read(self.handle)
+            ret = ljm_reference.stream_read(self._handle)
             curr_data = ret[0]
 
             if verbose:
                 print("[%26s] %15d / %15d %4.1d%% %15d %15d"
                       % (datetime.datetime.now(), self.max_index, size,
-                         ((float(self.max_index) / float(size)) * 100 if self.max_index else 0), ret[1], ret[2]))
+                         ((float(self.max_index) / float(size)) * 100
+                          if self.max_index else 0), ret[1], ret[2]))
 
             for i in range(0, len(curr_data), step_size):
                 # Ensure that this packet won't overflow our buffer.
@@ -1562,14 +1629,14 @@ class LabjackReader(object):
                 curr_time = (scans_per_read / scan_rate) * (packet_num + (i / len(curr_data)))
 
                 # We get a giant 1D list back, so work with what we have.
-                self.data_arr[self._max_index: self._max_index + step_size] =\
+                self._data_arr[self._max_index: self._max_index + step_size] =\
                     curr_data[i:i + step_size]
                 self._max_index += step_size
 
                 # Put in the time as well
-                self.data_arr[self._max_index] = curr_time
+                self._data_arr[self._max_index] = curr_time
                 self._max_index += 1
-                self.data_arr[self._max_index] = time_func() - start
+                self._data_arr[self._max_index] = _time_func() - start
                 self._max_index += 1
 
             packet_num += 1
@@ -1591,7 +1658,7 @@ class LabjackReader(object):
                 print("Scans Skipped = %0.0f" % (curr_skip/num_addrs))
 
         # We are done, record the actual ending time.
-        end = time_func()
+        end = _time_func()
 
         total_time = end - start
         if verbose:
@@ -1619,17 +1686,21 @@ class LabjackReader(object):
         ----------
         mode: str, optional
             Valid options are
-            'all': Get all data.
-            'relative': Expects you to use the kwarg num_rows=n, with n as the
-                        number of rows to retrieve relative to the end.
-            'range': Retrieves a range of rows. Expects the kwargs 'start'
-                     and 'end'.
+
+            'all'
+                Get all data.
+            'relative'
+                Expects you to use the kwarg num_rows=n, with n as the number
+                of rows to retrieve relative to the end.
+            'range'
+                Retrieves a range of rows. Expects the kwargs 'start' and
+                'end'.
 
         Returns
         -------
         array_like: ndarray
-            A 2D array in the shape (ceil(1d data len/ (number of channels + 2),
-                                     number of channels + 2)
+            A 2D array in the shape
+            (ceil(1d data len/ (number of channels + 2), number of channels + 2)
             Final two columns are the LabJack device's time in nanoseconds, and
             the host system's time, also in nanoseconds.
 
@@ -1678,7 +1749,7 @@ class LabjackReader(object):
         if max_row < 0:
             return None
 
-        row_width = len(self.input_channels) + 2
+        row_width = len(self._input_channels) + 2
         max_row = int(max_row / row_width)
 
         if mode == "all" or mode == 'all':
@@ -1713,22 +1784,31 @@ class LabjackReader(object):
         ----------
         mode: str, optional
             Valid options are
-            'all': Get all data.
-            'relative': Expects you to use the kwarg num_rows=n, with n as the
-                        number of rows to retrieve relative to the end.
-            'range': Retrieves a range of rows. Expects the kwargs 'start'
-                     and 'end'.
+
+            'all'
+                Get all data.
+
+            'relative'
+                Expects you to use the kwarg num_rows=n, with n as the
+                number of rows to retrieve relative to the end.
+
+            'range'
+                Retrieves a range of rows. Expects the kwargs 'start'
+                and 'end'.
 
         Returns
         -------
         table: dataframe
             A Pandas Dataframe with the following columns:
-            AINB....AINC: Voltage values for the user-specified channels
-                          AIN #B to #C.
-            Time:  Recorded time (in nanoseconds) of datapoints in row, as
-                   observed by the LabJack
-            System Time: Recorded time (in nanoseconds) of datapoints in
-                         row, as observed by the host computer
+
+            AINB....AINC : float
+                Voltage values for the user-specified channels AINB to AINC.
+            Time : float
+                Recorded time (in seconds) of datapoints in row, as observed
+                by the LabJack
+            System Time : float
+                Recorded time (in seconds) of datapoints in row, as observed
+                by the host computer
 
         Notes
         -----
@@ -1737,5 +1817,5 @@ class LabjackReader(object):
         """
 
         return pd.DataFrame(self.to_list(mode, **kwargs),
-                            columns=self.input_channels
+                            columns=self._input_channels
                             + ["Time", "System Time"])
