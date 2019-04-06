@@ -710,8 +710,6 @@ class LabjackReader(object):
 
     _connection_open = False
 
-    _ljm_reference = LJMLibrary()
-
     # For administrative purposes, we will also keep track of the
     # self-reported metadata of this device.
     _meta_device = None
@@ -784,6 +782,7 @@ class LabjackReader(object):
                             % str(type(device_identifier)))
         self.device_type, self.connection_type = device_type, connection_type
         self.device_identifier = device_identifier
+        self._ljm_reference = LJMLibrary()
 
     def __enter__(self):
         self.open(verbose=False)
