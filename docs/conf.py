@@ -17,7 +17,7 @@ import os
 import sys
 import guzzle_sphinx_theme
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("../"))
 
 
 # -- Project information -----------------------------------------------------
@@ -52,6 +52,10 @@ extensions = [
     'nbsphinx',
 ]
 
+napoleon_google_docstring = False
+napoleon_use_param = False
+napoleon_use_ivar = True
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -69,7 +73,7 @@ master_doc = 'index'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = "Python"
+# language =
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -77,7 +81,7 @@ language = "Python"
 exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
+# pygments_style = None
 
 
 # -- Options for HTML output -------------------------------------------------
