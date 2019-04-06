@@ -1,9 +1,5 @@
 # Install the LJM Python wrapper that you can only get through their site.
 https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
 
-# Install for documentation building.
-sphinx
-numpydoc
-
 # Now, install thepackage as dictated by setup.py
 .

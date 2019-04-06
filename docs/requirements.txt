@@ -2,3 +2,7 @@
 Sphinx
 nbsphinx
 guzzle_sphinx_theme
+
+# Readthedocs thinks this package can be installed by only running setup.py. It can't.
+# Do extra work to compensate.
+https://labjack.com/sites/default/files/software/Python_LJM_2018_10_19.zip
