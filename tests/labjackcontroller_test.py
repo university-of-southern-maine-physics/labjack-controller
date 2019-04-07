@@ -85,7 +85,7 @@ def test_collect_data_gathering(get_ljm_devices, ljm_all_channels, resolution,
                               duration, frequency,
                               resolution=resolution,
                               verbose=False)
-            device_shape = np.shape(curr_device.to_list(mode="all"))
+            device_shape = np.shape(curr_device.to_array(mode="all"))
             expected_shape = (frequency * duration, len(channel_config) + 2)
 
             assert device_shape == expected_shape

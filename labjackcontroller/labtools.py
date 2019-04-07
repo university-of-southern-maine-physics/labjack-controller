@@ -884,7 +884,7 @@ class LabjackReader(object):
 
         self._max_index = value
 
-    def _reshape_data(self, from_row: int, to_row: int):
+    def _reshape_data(self, from_row: int, to_row: int) -> np.ndarray:
         """
         Get a range of rows from the recorded data
 
@@ -897,7 +897,7 @@ class LabjackReader(object):
 
         Returns
         -------
-        array_like: ndarray
+        array_like: numpy.ndarray
             A 2D array, starting at from_row, of data points, where
             every row is one data point across all channels.
         """
@@ -1676,7 +1676,7 @@ class LabjackReader(object):
 
         return total_time, (total_skip / num_addrs)
 
-    def to_list(self, mode="all", **kwargs) -> Union[List[List[float]], None]:
+    def to_array(self, mode="all", **kwargs) -> Union[List[List[float]], None]:
         """
         Return data in latest array.
 
@@ -1696,7 +1696,7 @@ class LabjackReader(object):
 
         Returns
         -------
-        array_like: ndarray
+        array_like: numpy.ndarray
             A 2D array in the shape
             (ceil(1d data len/ (number of channels + 2), number of channels + 2)
             Final two columns are the LabJack device's time in nanoseconds, and
@@ -1711,7 +1711,7 @@ class LabjackReader(object):
         >>> reader = LabjackReader("T7")
         >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
         >>> # Return all the data we collected.
-        >>> reader.to_list(mode='all')
+        >>> reader.to_array(mode='all')
         [[.....]
          [.....]
          [.....]
@@ -1720,7 +1720,7 @@ class LabjackReader(object):
         [.....]
         [.....]]
         >>> # Return the last 50 rows of data we collected.
-        >>> reader.to_list(mode='relative', num_rows=50)
+        >>> reader.to_array(mode='relative', num_rows=50)
         [[.....]
          [.....]
          [.....]
@@ -1729,7 +1729,7 @@ class LabjackReader(object):
         [.....]
         [.....]]
         >>> # Return rows 17 through 65, inclusive, of the collected data.
-        >>> reader.to_list(mode='range', start=17, end=65)
+        >>> reader.to_array(mode='range', start=17, end=65)
         [[.....]
          [.....]
          [.....]
@@ -1796,7 +1796,7 @@ class LabjackReader(object):
 
         Returns
         -------
-        table: dataframe
+        table: pandas.DataFrame
             A Pandas Dataframe with the following columns:
 
             AINB....AINC : float
@@ -1814,6 +1814,6 @@ class LabjackReader(object):
         is undefined.
         """
 
-        return pd.DataFrame(self.to_list(mode, **kwargs),
+        return pd.DataFrame(self.to_array(mode, **kwargs),
                             columns=self._input_channels
                             + ["Time", "System Time"])
