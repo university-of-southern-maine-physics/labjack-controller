@@ -13,11 +13,14 @@ setup(name='labjackcontroller',
           'License :: OSI Approved :: MIT License',
           'Programming Language :: Python :: 3'
       ],
+      dependency_links=[
+                        'https://github.com/labjack/labjack-ljm-python/tarball/master',
+                       ],
       install_requires=[
                         'typing',
                         'numpy',
                         'pandas',
                         'colorama',
-                        'LJMPython'
+                        'labjack-ljm'
                        ],
       zip_safe=False)
