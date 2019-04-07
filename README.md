@@ -20,15 +20,18 @@ All other requirements will be automatically acquired by `pip`; see `setup.py` f
 [![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
 [![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
 
-To install, clone this repository and install with `pip`. By terminal, this is
+You can install this package with `pip` through our `PyPi` package with the command
+```bash
+pip install labjackcontroller
+```
+
+Alternatively, you can install from this github repository with
 
 ```bash
 git clone https://github.com/university-of-southern-maine-physics/labjack-controller.git
 cd labjack-controller
-pip install -r requirements.txt
+pip install .
 ```
-
-Alternatively, if you have [Python for LJM](https://labjack.com/support/software/installers/ljm) installed already, you can change the `pip` install command to `pip install .`
 
 ## Sample Usage
 
