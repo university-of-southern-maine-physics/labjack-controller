@@ -501,7 +501,7 @@ class LJMLibrary(metaclass=Singleton):
         return list(zip(*[dev_types, conn_types, ser_nums, ip_addrs]))
 
     @property
-    def staticlib(self) -> Union[ctypes.WinDLL, ctypes.CDLL]:
+    def staticlib(self):
         """
         Get a reference to the functions provided in the LJM C wrapper.
         """
