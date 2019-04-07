@@ -700,7 +700,19 @@ class LJMLibrary(metaclass=Singleton):
 
 
 class LabjackReader(object):
-    """A class designed to represent an arbitrary LabJack device."""
+    """
+    A class designed to represent an arbitrary LabJack device.
+
+    Attributes
+    ----------
+    connection_status : bool
+        True if the connection is open
+        False if the connection is closed/does not exist
+    max_row : int
+        The number of rows recorded in the data array, or -1 on error
+    max_index : int
+        The flat-mapped 1D index of the latest value that has been recorded.
+    """
 
     # Keep track of the input channels we're reading.
     _input_channels = []
@@ -827,30 +839,13 @@ class LabjackReader(object):
     def connection_status(self):
         """
         Get the status of the connection to the LabJack
-
-        Returns
-        -------
-        connection_open: bool
-            True if the connection is open
-            False if the connection is closed/does not exist
-
         """
         return self._connection_open
 
     @property
     def max_row(self) -> int:
         """
-        Return the number of the last row that currently exists.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        row: int
-            The number of the last row recorded in the data array,
-            or -1 on error
+        Get the number of rows that currently exist.
         """
         if self.max_index < 1:
             return -1
@@ -860,13 +855,7 @@ class LabjackReader(object):
     @property
     def max_index(self) -> int:
         """
-        Return the largest index value that has been filled.
-
-        Returns
-        -------
-        max_index: int
-            The index of the latest value that has been recorded.
-
+        Get or set the largest index value that has been filled.
         """
         if self._max_index is not None and self._max_index:
             return self._max_index
