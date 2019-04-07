@@ -35,7 +35,7 @@ pip install .
 
 ## Sample Usage
 
-Multiple demonstrations of library functions are located in the `demos` folder. However, getting started with full streaming is as easy as
+Multiple demonstrations of library functions are located in the `demos` folder, and you can [read the library documentation here.](https://labjack-controller.readthedocs.io/en/latest/index.html) However, getting started with full streaming is as easy as
 
 ```python
 from labjackcontroller.labtools import LabjackReader
