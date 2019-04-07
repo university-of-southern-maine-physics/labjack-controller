@@ -53,6 +53,7 @@ script:
   - pytest -v tests/
 
 deploy:
+  skip_existing: true
   provider: pypi
   user: "nyctanthous"
   password:
