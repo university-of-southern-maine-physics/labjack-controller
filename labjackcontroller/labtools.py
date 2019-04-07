@@ -137,29 +137,29 @@ class LJMLibrary(metaclass=Singleton):
         A reference to the functions provided in the LJM C wrapper.
     """
     # Base reference to the staticlib.
-    staticlib = None
+    _staticlib = None
     _ljm_buffer = {}
     _ljm_is_open = {}
 
     def __init__(self):
         os_is = sys.platform.startswith
         try:
-            self.staticlib = (ctypes.WinDLL("LabJackM.dll") if os_is("win32") else
-                              ctypes.CDLL("LabJackM.dll") if os_is("cygwin") else
-                              ctypes.CDLL("libLabJackM.so") if os_is("linux") else
-                              ctypes.CDLL("libLabJackM.dylib") if os_is("darwin")
-                              else None)
+            self._staticlib = (ctypes.WinDLL("LabJackM.dll") if os_is("win32") else
+                               ctypes.CDLL("LabJackM.dll") if os_is("cygwin") else
+                               ctypes.CDLL("libLabJackM.so") if os_is("linux") else
+                               ctypes.CDLL("libLabJackM.dylib") if os_is("darwin")
+                               else None)
         except Exception as e:
             if os_is("darwin"):
                 try:
-                    self.staticlib = ctypes.CDLL("/usr/local/lib/libLabJackM.dylib")
+                    self._staticlib = ctypes.CDLL("/usr/local/lib/libLabJackM.dylib")
                 except Exception:
                     pass
 
             raise LJMError(errorString="Cannot load the LJM library %s.\n%s"
                            % (str(self.staticlib), str(e)))
 
-        if not self.staticlib:
+        if not self._staticlib:
             raise LJMError(errorString="Cannot load the LJM library."
                            " Unsupported platform %s." % sys.platform)
 
@@ -500,6 +500,13 @@ class LJMLibrary(metaclass=Singleton):
 
         return list(zip(*[dev_types, conn_types, ser_nums, ip_addrs]))
 
+    @property
+    def staticlib(self) -> Union[ctypes.WinDLL, ctypes.CDLL]:
+        """
+        Get a reference to the functions provided in the LJM C wrapper.
+        """
+        return self._staticlib
+
     def stream_read(self, handle: int) -> Tuple[ctypes.c_double, int, int]:
         """
         Returns data from a LabJack device with an open connection that is
@@ -821,10 +828,6 @@ class LabjackReader(object):
         """
         Get the status of the connection to the LabJack
 
-        Parameters
-        ----------
-        None
-
         Returns
         -------
         connection_open: bool
@@ -858,10 +861,6 @@ class LabjackReader(object):
     def max_index(self) -> int:
         """
         Return the largest index value that has been filled.
-
-        Parameters
-        ----------
-        None
 
         Returns
         -------
@@ -1120,8 +1119,11 @@ class LabjackReader(object):
                 main stream clock. Rising edges will increment a counter and
                 trigger a stream scan after the number of edges specified
                 in the setting stream_clock_divisor. Is one of the following:
-                "internal": Use the internal crystal to clock the stream.
-                "external": Use an external clock plugged into CIO3.
+
+                "internal"
+                    Use the internal crystal to clock the stream.
+                "external"
+                    Use an external clock plugged into CIO3.
             stream_clock_divisor: int
                 Not Implemented
             stream_settling_time: Union[str, float]
