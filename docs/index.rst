@@ -26,25 +26,22 @@ Getting started is as simple as
 
     from labjackcontroller.labtools import LabjackReader
 
-    duration = 10  # seconds
-    frequency = 100  # Hz
-    channels = ["AIN0"]
-    voltages = [10.0]
-
-
     # Instantiate a LabjackReader
     with LabjackReader("T7") as my_lj:
-        # Stream data
-        my_lj.collect_data(channels, voltages, duration, frequency)
+        # Stream data on the analog channel AIN0 in 10v mode for 10 seconds at 100 Hz.
+        my_lj.collect_data(["AIN0"], [10.0], 10, 100)
 
         # Get the data we collected.
         print(my_lj.to_dataframe())
 
 
+User Guide
+==========
+
 .. toctree::
    :maxdepth: 2
    :glob:
 
-   installation
+   overview
    demos
    Module Documentation <modules>

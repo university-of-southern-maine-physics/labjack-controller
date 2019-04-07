@@ -1,12 +1,12 @@
 import pytest
 import itertools
 import numpy as np
-from labjackcontroller.labtools import LabjackReader, ljm_reference
+from labjackcontroller.labtools import LabjackReader, LJMLibrary
 
 
 @pytest.fixture(scope='session')
 def get_ljm_devices():
-    return ljm_reference.list_all()
+    return LJMLibrary().list_all()
 
 
 @pytest.fixture(scope='session')
