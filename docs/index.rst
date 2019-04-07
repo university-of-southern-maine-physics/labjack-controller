@@ -39,9 +39,9 @@ User Guide
 ==========
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :glob:
 
    overview
    demos
-   Module Documentation <modules>
+   API Documentation <modules>
