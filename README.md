@@ -18,6 +18,7 @@ All other requirements will be automatically acquired by `pip`; see `setup.py` f
 
 ## Installation
 [![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
+[![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
 
 To install, clone this repository and install with `pip`. By terminal, this is
 
@@ -46,7 +47,7 @@ with LabjackReader("T7") as my_lj:
     my_lj.collect_data(channels, voltages, duration, frequency)
 
     # Get all data recorded as a 2D Numpy array
-    my_data = myLabjack.to_list()
+    my_data = myLabjack.to_array()
 ```
 
 ## Contributors
