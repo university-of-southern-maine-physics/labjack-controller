@@ -8,7 +8,7 @@ tags:
   - milky way
 authors:
   - name: Benjamin A. Montgomery
-	orcid: 0000-0000-0000-0000
+	orcid: 0000-0002-1240-5385
 	affiliation: University of Southern Maine
   - name: Paul A. Nakroshis
 	orcid: 0000-0000-0000-0000
@@ -28,9 +28,9 @@ upon the developer to ensure these proprietary tools are stable, viable
 solutions in the long term. To combat this, hardware has been developed by
 multiple manufacturers to capture this market. These solutions tend to have
 cost-effective, versatile hardware, but interfaces that are poorly designed or
-immature. Current offerings from Labjack are one such example; their hardware 
-is used in major industrial applications, but the interface is exceedingly 
-nuanced and provides little error recovery.
+immature [@Lawson]. Current offerings from Labjack [@Labjack] are one such
+example; their hardware is used in major industrial applications, but the
+interface is exceedingly nuanced and provides little error recovery.
 
 `labjack-controller` is a Python package which targets T-series DAQs from
 LabJack, and is designed to provide a powerful thread-safe facade
