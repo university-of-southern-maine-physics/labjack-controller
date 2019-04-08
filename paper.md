@@ -51,10 +51,8 @@ physics laboratory courses and a research lab at the University of Southern Main
 for the purposes of reacting to realtime data, most notably with a torsion 
 pendulum with dynamic electromagnetic damping.
 
-In order to use this software, the user may choose to coonect the LabJack with
-an ethernet or a USB cable. This package has not been developed with the option
-of using the T7-Pro's wireless capability. `labjack-controller` has been tested 
-and found to work on MacOS 10.14 and Ubuntu 18.10. 
+In order to use this software, the user may choose to connect the LabJack with
+an ethernet or USB cable (on the T7-Pro, one can use the wireless capability). 
 
 # Acknowledgements
 
