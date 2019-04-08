@@ -27,9 +27,9 @@ copyright = '2019, Ben Montgomery'
 author = 'Ben Montgomery'
 
 # The short X.Y version
-version = '0.2'
+version = '0.3'
 # The full version, including alpha/beta/rc tags
-release = '0.2.1'
+release = '0.3.0'
 
 
 # -- General configuration ---------------------------------------------------
