@@ -41,9 +41,9 @@ Multiple demonstrations of library functions are located in the `demos` folder, 
 from labjackcontroller.labtools import LabjackReader
 
 duration = 10  # seconds
-frequency = 100  # Hz
-channels = ["AIN0"]
-voltages = [10.0]
+frequency = 100  # sampling rate in Hz
+channels = ["AIN0"]  # read Analog Input Channel 0
+voltages = [10.0] # i.e. input voltages in range -10 to +10 volts
 
 # Instantiate a LabjackReader
 with LabjackReader("T7") as my_lj:

@@ -8,11 +8,11 @@ tags:
   - milky way
 authors:
   - name: Benjamin A. Montgomery
-    orcid: 0000-0000-0000-0000
-    affiliation: University of Southern Maine
+	orcid: 0000-0000-0000-0000
+	affiliation: University of Southern Maine
   - name: Paul A. Nakroshis
-    orcid: 0000-0000-0000-0000
-    affiliation: University of Southern Maine
+	orcid: 0000-0000-0000-0000
+	affiliation: University of Southern Maine
 date: 5 April 2019
 bibliography: paper.bib
 ---
@@ -28,11 +28,11 @@ upon the developer to ensure these proprietary tools are stable, viable
 solutions in the long term. To combat this, hardware has been developed by
 multiple manufacturers to capture this market. These solutions tend to have
 cost-effective, versatile hardware, but interfaces that are poorly designed or
-immature. Current offerings from Labjack are one such example; their hardware is
-used in major industrial apllications, but the interface is exceedingly nuanced
-and provideds little error recovery.
+immature. Current offerings from Labjack are one such example; their hardware 
+is used in major industrial applications, but the interface is exceedingly 
+nuanced and provides little error recovery.
 
-``labjack-controller`` is a Python package which targets T-series DAQs from
+`labjack-controller` is a Python package which targets T-series DAQs from
 LabJack, and is designed to provide a powerful thread-safe facade
 representation of these devices. It focuses on providing functions that
 abstract and automate data collection, error handling, and configuration
@@ -40,16 +40,21 @@ procedures that are normally exceedingly nuanced or complex. Care was given
 to writing efficient code for streaming data from and communicating to these
 devices, relying heavily on C foreign functions, and interact directly
 with Labjack's provided low-level C interface. All functions are thread-safe,
-data associated with the facade can be shared between multiple processes with
+data associated with the facade can be shared between multiple processes with 
 live updating.
 
-``labjack-controller`` is designed to be used by anyone who has at least an
+`labjack-controller` is designed to be used by anyone who has at least an
 introductory knowledge of Python and intends to involve a computer in the
-process of reading sensor data, from data backup purposes to real-time reaction
-to sensor readings. It is currently used in upper-level undergraduate physics
-courses at the University of Southern Maine for the purposes of reacting to
-realtime data, most notably with a torsion pendulum with dynamic electromagnetic
-dampening.
+process of reading sensor data, from data backup purposes to real-time 
+reaction to sensor readings. It is currently used in upper-level undergraduate
+physics laboratory courses and a research lab at the University of Southern Maine
+for the purposes of reacting to realtime data, most notably with a torsion 
+pendulum with dynamic electromagnetic damping.
+
+In order to use this software, the user may choose to coonect the LabJack with
+an ethernet or a USB cable. This package has not been developed with the option
+of using the T7-Pro's wireless capability. `labjack-controller` has been tested 
+and found to work on MacOS 10.14 and Ubuntu 18.10. 
 
 # Acknowledgements
 
