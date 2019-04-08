@@ -1,9 +1,9 @@
 from labjackcontroller.labtools import LabjackReader
 
 duration = 10  # seconds
-frequency = 100  # Hz
-channels = ["AIN0"]
-voltages = [10.0]
+frequency = 100  # sampling frequency in Hz
+channels = ["AIN0"] # read Analog INput 0
+voltages = [10.0]  # i.e. read input voltages from -10 to 10 volts
 
 
 # Instantiate a LabjackReader
