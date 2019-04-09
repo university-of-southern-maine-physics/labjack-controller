@@ -3,9 +3,9 @@ title: 'labjack-controller: Fast Realtime Data Collection with Labjack T-Series 
 tags:
   - Python
   - experimental
-  - dynamics
-  - galactic dynamics
-  - milky way
+  - daq
+  - labjack
+  - parallel
 authors:
   - name: Benjamin A. Montgomery
 	orcid: 0000-0002-1240-5385
