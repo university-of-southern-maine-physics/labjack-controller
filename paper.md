@@ -51,8 +51,9 @@ physics laboratory courses and a research lab at the University of Southern Main
 for the purposes of reacting to realtime data, most notably with a torsion 
 pendulum with dynamic electromagnetic damping.
 
-In order to use this software, the user may choose to connect the LabJack with
-an ethernet or USB cable (on the T7-Pro, one can use the wireless capability). 
+In order to use this package, the user may choose to connect the LabJack with
+an ethernet or USB cable (on the T7-Pro, one can use the wireless capability).
+Linux, OSX, and Windows are fully supported.
 
 # Acknowledgements
 
