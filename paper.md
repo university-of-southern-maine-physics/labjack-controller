@@ -8,11 +8,11 @@ tags:
   - parallel
 authors:
   - name: Benjamin A. Montgomery
-	orcid: 0000-0002-1240-5385
-	affiliation: University of Southern Maine
+        orcid: 0000-0002-1240-5385
+        affiliation: University of Southern Maine
   - name: Paul A. Nakroshis
-	orcid: 0000-0003-1887-354X
-	affiliation: University of Southern Maine
+        orcid: 0000-0003-1887-354X
+        affiliation: University of Southern Maine
 date: 5 April 2019
 bibliography: paper.bib
 ---
