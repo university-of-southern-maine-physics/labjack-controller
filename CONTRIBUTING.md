@@ -5,7 +5,7 @@ To make life easier for you (and to prevent PRs from getting rejected all the ti
 we've outlined some general contributing guidelines for you to follow to ensure all of
 your code is awesome.
 
-## If you found a bug
+## If You Found a Bug
 
 ### Issues
 
