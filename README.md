@@ -53,6 +53,10 @@ with LabjackReader("T7") as my_lj:
     my_data = myLabjack.to_array()
 ```
 
+## How To Contribute
+
+See [How To Contribute][0].
+
 ## Contributors
 
 + [Ben Montgomery](https://github.com/Nyctanthous)
@@ -60,3 +64,5 @@ with LabjackReader("T7") as my_lj:
 ## Special Thanks
 
 + [Paul Nakroshis](https://github.com/paulnakroshis)
+
+[0]: https://github.com/university-of-southern-maine-physics/labjack-controller/blob/master/CONTRIBUTING.md
