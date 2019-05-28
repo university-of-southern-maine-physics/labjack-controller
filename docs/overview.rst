@@ -11,7 +11,7 @@ Requirements
 
 .. note::
 
-    The LJM library is provided a a collection of C functions that Labjack has bundled with different tools depending on your platform.
+    The LJM library is a collection of C functions that Labjack has bundled with different tools depending on your platform.
     For example, on Linux, Kipling is also installed. None of these additional applications are needed to use this library.
 
 .. _installation:
@@ -20,15 +20,21 @@ Requirements
 Installation
 ============
 
-To install, clone this repository and install with `pip`. By terminal, this is
+You can install this package with `pip` through our `PyPi` package with the command
+
+.. code-block:: bash
+
+    pip install labjackcontroller
+
+
+Alternatively, you can install from this github repository with
 
 .. code-block:: bash
 
     git clone https://github.com/university-of-southern-maine-physics/labjack-controller.git
     cd labjack-controller
-    pip install -r requirements.txt
+    pip install .
 
-Alternatively, if you have `Python for LJM <https://labjack.com/support/software/installers/ljm>`_ installed already, you can change the :bash:`pip` install command to :bash:`pip install .`
 
 License
 =======
