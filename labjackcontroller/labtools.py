@@ -1522,7 +1522,7 @@ class LabjackReader(object):
         Examples
         --------
         Create a reader for a Labjack T7 and read off 60.5 seconds of data at
-        50 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
+        10 kHz from channels AIN0, AIN1 which have a maximum voltage of 10V
         each:
 
         >>> reader = LabjackReader("T7")
