@@ -94,12 +94,12 @@ def test_collect_data_gathering(get_ljm_devices, ljm_all_channels, resolution,
 
 
 @pytest.mark.parametrize("inputs, inputs_max_voltages, seconds, scan_rate,"
-                         " scans_per_read, stream_setting, resolution,"
+                         " scans_per_read, resolution,"
                          " expected_err",
-                         [(["AIN0"], [10.0], 1, 1000, 500, 1, 1, None)])
+                         [(["AIN0"], [10.0], 1, 1000, 500, 1, None)])
 def test_collect_data_parameters(get_ljm_devices, inputs, inputs_max_voltages,
                                  seconds, scan_rate, scans_per_read,
-                                 stream_setting, resolution, expected_err):
+                                 resolution, expected_err):
     if not len(get_ljm_devices):
         return
 
@@ -109,14 +109,12 @@ def test_collect_data_parameters(get_ljm_devices, inputs, inputs_max_voltages,
                     curr_device.collect_data(inputs, inputs_max_voltages,
                                              seconds, scan_rate,
                                              scans_per_read=scans_per_read,
-                                             stream_setting=stream_setting,
                                              resolution=resolution)
     else:
         with LabjackReader(*get_ljm_devices[0][:3]) as curr_device:
             curr_device.collect_data(inputs, inputs_max_voltages,
                                      seconds, scan_rate,
                                      scans_per_read=scans_per_read,
-                                     stream_setting=stream_setting,
                                      resolution=resolution)
 
 

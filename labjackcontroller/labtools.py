@@ -3,6 +3,8 @@ from labjack.ljm import constants as ljm_constants, \
                         errorcodes as ljm_errorcodes
 from labjack.ljm.ljm import LJMError
 
+from multiprocessing import Process, Pool
+
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
@@ -928,7 +930,7 @@ class LabjackReader(object):
                       " stream running.")
             pass
 
-    def _setup(self, inputs, inputs_max_voltages, stream_settling, resolution,
+    def _setup(self, inputs, inputs_max_voltages, resolution,
                scan_rate, scans_per_read=-1) -> Tuple[int, int]:
         """
         Set up a connection to the LabJack for streaming
@@ -941,8 +943,6 @@ class LabjackReader(object):
         inputs_max_voltages: sequence of real values
             Maximum voltages corresponding element-wise to the channels
             listed in inputs.
-        stream_settling: int, optional
-            See official LabJack documentation.
         resolution: int, optional
             See official LabJack documentation.
         scan_rate: int
@@ -979,12 +979,12 @@ class LabjackReader(object):
 
         # Next, verify the scans/read.
         if scans_per_read == -1:
-            scans_per_read = scan_rate
+            scans_per_read = int(scan_rate / 2)
         elif scans_per_read > scan_rate:
             warnings.warn("Maximum valid scan/read rate is larger than"
                           " the scan rate. Setting to be equal to the scan"
                           " rate.", UserWarning)
-            scans_per_read = scan_rate
+            scans_per_read = int(scan_rate / 2)
 
         # If a packet is lost, don't try and get it again.
         self._ljm_reference.modify_settings(retry_on_transaction_err=False)
@@ -1010,9 +1010,6 @@ class LabjackReader(object):
 
         names.extend([element + "_RANGE" for element in ain_inputs])
         values.extend(inputs_max_voltages)
-
-        self.modify_settings(stream_settling_time=stream_settling,
-                             stream_resolution=resolution)
 
         # Write the analog inputs' negative channels (when applicable),
         # ranges, stream settling time and stream resolution configuration.
@@ -1242,7 +1239,6 @@ class LabjackReader(object):
     def find_max_freq(self,
                       inputs: List[str],
                       inputs_max_voltages: List[float],
-                      stream_setting=0,
                       resolution=0,
                       verbose=True,
                       max_buffer_size=0,
@@ -1259,8 +1255,6 @@ class LabjackReader(object):
         inputs_max_voltages : sequence of real values
             Maximum voltages corresponding element-wise to the channels
             listed in inputs.
-        stream_setting : int, optional
-            See official LabJack documentation.
         resolution : int, optional
             See official LabJack documentation.
         verbose : str, optional
@@ -1328,7 +1322,6 @@ class LabjackReader(object):
                     self.open(verbose=False)
                     scan_rate, sample_rate = self._setup(inputs,
                                                          inputs_max_voltages,
-                                                         stream_setting,
                                                          resolution,
                                                          med_rate,
                                                          scans_per_read=scans_per_read)
@@ -1467,18 +1460,16 @@ class LabjackReader(object):
                            (Fore.RED if ljm_buffer_size > MAX_LJM_BUFFERSIZE else Fore.RESET) + str(ljm_buffer_size) + Fore.RESET,
                            (Fore.RED if num_skips > 0 else Fore.RESET) + str(num_skips) + Fore.RESET))
 
-    # TODO: stream_setting needs to be renamed and abstracted away, see
-    # STREAM_SETTLING_US
-    # at https://labjack.com/support/datasheets/t-series/communication/stream-mode
     def collect_data(self,
                      inputs: List[str],
                      inputs_max_voltages: List[float],
                      seconds: float,
                      scan_rate: int,
                      scans_per_read=-1,
-                     stream_setting="auto",
                      resolution=4,
-                     verbose=False) -> Tuple[float, float]:
+                     verbose=False,
+                     callback_function=None,
+                     num_threads=4) -> Tuple[float, float]:
         """
         Collect data from the LabJack device.
 
@@ -1503,10 +1494,6 @@ class LabjackReader(object):
         scans_per_read : int, optional
             Number of data points contained in a packet sent by the LabJack
             device. -1 indicates the maximum possible sample rate.
-        stream_setting : float, optional
-            Time in microseconds to allow signals to settle.
-            Does not apply to the 1st channel in the scan list, as that
-            settling is controlled by scan rate. Must be "auto" or a float.
         resolution : int, optional
             See official LabJack documentation.
         verbose : str, optional
@@ -1530,6 +1517,8 @@ class LabjackReader(object):
         None
 
         """
+
+        self.modify_settings(stream_settling_time="auto")
 
         if not len(inputs):
             raise ValueError("Needed a non-empty string collection of channels.")
@@ -1573,8 +1562,9 @@ class LabjackReader(object):
         # stores our data.
         size = int(seconds * scan_rate * (len(inputs) + 2))
 
+
         scan_rate, scans_per_read = self._setup(inputs, inputs_max_voltages,
-                                                stream_setting, resolution,
+                                                resolution,
                                                 scan_rate,
                                                 scans_per_read=scans_per_read)
 
@@ -1593,40 +1583,59 @@ class LabjackReader(object):
 
         self._data_arr = (ctypes.c_double * size)(size)
 
-        start = _time_func()
-        while self.max_index < size:
-            # Read all rows of data off of the latest packet in the stream.
-            ret = self._ljm_reference.stream_read(self._handle)
-            curr_data = ret[0]
+        all_waiting = []
+        with Pool(processes=num_threads) as threadpool:
+            start = _time_func()
+            while self.max_index < size:
+                # Read all rows of data off of the latest packet in the stream.
+                ret = self._ljm_reference.stream_read(self._handle)
+                curr_data = ret[0]
 
-            if verbose:
-                print("[%26s] %15d / %15d %4.1d%% %15d %15d"
-                      % (datetime.datetime.now(), self.max_index, size,
-                         ((float(self.max_index) / float(size)) * 100
-                          if self.max_index else 0), ret[1], ret[2]))
+                if verbose:
+                    print("[%26s] %15d / %15d %4.1d%% %15d %15d"
+                        % (datetime.datetime.now(), self.max_index, size,
+                            ((float(self.max_index) / float(size)) * 100
+                            if self.max_index else 0), ret[1], ret[2]))
 
-            for i in range(0, len(curr_data), step_size):
-                # Ensure that this packet won't overflow our buffer.
-                if self._max_index >= size:
-                    break
+                for i in range(0, len(curr_data), step_size):
+                    # Ensure that this packet won't overflow our buffer.
+                    if self._max_index >= size:
+                        break
 
-                # We will manually calculate the times each entry occurs at.
-                # The stream itself is timed by the same clock that runs
-                # CORE_TIMER, and it is officially advised we use the stream
-                # clocking instead.
-                # See https://forums.labjack.com/index.php?showtopic=6992
-                curr_time = (scans_per_read / scan_rate) * (packet_num + (i / len(curr_data)))
+                    # We will manually calculate the times each entry occurs at.
+                    # The stream itself is timed by the same clock that runs
+                    # CORE_TIMER, and it is officially advised we use the stream
+                    # clocking instead.
+                    # See https://forums.labjack.com/index.php?showtopic=6992
+                    curr_time = (scans_per_read / scan_rate) * (packet_num + (i / len(curr_data)))
 
-                # We get a giant 1D list back, so work with what we have.
-                self._data_arr[self._max_index: self._max_index + step_size] =\
-                    curr_data[i:i + step_size]
-                self._max_index += step_size
+                    # We get a giant 1D list back, so work with what we have.
+                    self._data_arr[self._max_index: self._max_index + step_size] =\
+                        curr_data[i:i + step_size]
+                    self._max_index += step_size
 
-                # Put in the time as well
-                self._data_arr[self._max_index] = curr_time
-                self._max_index += 1
-                self._data_arr[self._max_index] = _time_func() - start
-                self._max_index += 1
+                    # Put in the time as well
+                    self._data_arr[self._max_index] = curr_time
+                    self._max_index += 1
+                    self._data_arr[self._max_index] = _time_func() - start
+                    self._max_index += 1
+
+                    if callback_function:
+                        all_waiting.append(threadpool.apply_async(callback_function,
+                                            (self._data_arr[self._max_index - step_size - 2: self._max_index],)))
+
+                if callback_function:
+                    for waiting_thread in all_waiting:
+                        if waiting_thread.ready():
+                            waiting_thread.get()
+            
+            # Outside of data gathering. Close all.
+            while callback_function and len(all_waiting):
+                for i in range(len(all_waiting)):
+                    if all_waiting[i].ready():
+                        all_waiting[i].get()
+                        del all_waiting[i]
+                        break
 
             packet_num += 1
 
