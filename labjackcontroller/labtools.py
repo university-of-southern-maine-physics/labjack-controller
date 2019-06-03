@@ -1484,7 +1484,7 @@ class LabjackReader(object):
             Must correspond to the actual name on the device.
         inputs_max_voltages : sequence of real values
             Maximum voltages corresponding element-wise to the channels
-            listed in inputs.
+            listed in inputs. Only applicable for analog (AIN) channels.
         seconds : float
             Duration of the data run in seconds. The run will last at least as
             long as this value, and will try to stop streaming when this time
@@ -1533,6 +1533,21 @@ class LabjackReader(object):
         >>> reader.collect_data(["AIN0", "AIN1"], [10.0, 10.0], 60.5, 10000)
         None
 
+        Read a mix of digital and analog channels, recalling we ony need to
+        set the voltage mode for analog channels:
+
+        >>> reader.collect_data(["DIO2", "AIN2"], [10.0], 60.5, 10000)
+        None
+
+        Write a callback function that prints out our live data as we
+        encounter it:
+
+        >>> def new_callback(row):
+        >>>     print("AIN0: %f, Time: %f, System Time: %f."
+                      % (row[0], row[1], row[2]))
+        >>> reader.collect_data(["AIN0"], [10.0], 60.5, 10000,
+                                callback_function=new_callback)
+
         """
 
         self.modify_settings(stream_settling_time="auto")
@@ -1551,11 +1566,6 @@ class LabjackReader(object):
             if not isinstance(channel, str):
                 raise TypeError("Expected a numerical value, not %s"
                                 % str(channel))
-
-        if len(inputs_max_voltages) != len(inputs):
-            raise ValueError("inputs must have the same length as "
-                             "inputs_max_voltages, as they contain values that"
-                             " correspond element-wise.")
 
         # Input validation for seconds
         if seconds <= 0:
@@ -1578,7 +1588,6 @@ class LabjackReader(object):
         # Create a RawArray for multiple processes; this array
         # stores our data.
         size = int(seconds * frequency * (len(inputs) + 2))
-
 
         frequency, scans_per_read = self._setup(inputs, inputs_max_voltages,
                                                 resolution,
