@@ -21,7 +21,7 @@ If applicable, add screenshots to help explain your problem.
 
 **Desktop (please complete the following information):**
  - OS: [e.g. Arch Linux]
- - Python version [e.g. 22]
+ - Python version [e.g. 3.8]
 
 **Additional context**
 Add any other context about the problem here.
