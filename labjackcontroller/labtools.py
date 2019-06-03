@@ -344,7 +344,7 @@ class LJMLibrary(metaclass=Singleton):
         port = ctypes.c_int32(0)
         max_packet_size = ctypes.c_int32(0)
 
-        error = self._ljm_reference.staticlib\
+        error = self.staticlib\
             .LJM_GetHandleInfo(handle,
                                ctypes.byref(device_type),
                                ctypes.byref(connection_type),
@@ -564,7 +564,7 @@ class LJMLibrary(metaclass=Singleton):
         return packet_data, dev_buffer_backlog.value, \
             ljm_buffer_backlog.value
 
-    def stream_start(self, handle: int, scan_list: List[str], scan_rate: float,
+    def stream_start(self, handle: int, scan_list: List[str], frequency: float,
                      scans_per_read: int) -> float:
         """
         Based on the LJM function LJM_eStreamStart. Creates a buffer that the
@@ -578,7 +578,7 @@ class LJMLibrary(metaclass=Singleton):
             connection.
         scan_list : List[str]
             List of addresses ("AIN0", etc) to scan from.
-        scan_rate : float
+        frequency : float
             The rate in Hz that all specified addresses will be read at.
         scans_per_read : int
             When reading data from the stream, this value determines how
@@ -587,7 +587,7 @@ class LJMLibrary(metaclass=Singleton):
 
         Returns
         -------
-        actual_scan_rate: float
+        actual_frequency: float
             The actual frequency the device will scan at.
 
         Raises
@@ -600,7 +600,7 @@ class LJMLibrary(metaclass=Singleton):
 
         self._validate_handle(handle)
 
-        scan_rate = ctypes.c_double(scan_rate)
+        frequency = ctypes.c_double(frequency)
         num_addrs = len(scan_list)
         scan_list = self._names_to_modbus_addresses(scan_list)
         self._ljm_buffer[handle] = scans_per_read * num_addrs
@@ -609,12 +609,12 @@ class LJMLibrary(metaclass=Singleton):
                                                 c_int32(scans_per_read),
                                                 c_int32(num_addrs),
                                                 ctypes.byref(scan_list),
-                                                ctypes.byref(scan_rate))
+                                                ctypes.byref(frequency))
 
         if error != ljm_errorcodes.NOERROR:
             raise LJMError(error)
 
-        return scan_rate.value
+        return frequency.value
 
     def stream_stop(self, handle: int) -> None:
         """
@@ -834,8 +834,8 @@ class LabjackReader(object):
 
         return "LabjackReader('Type': %s, Connection': %s, 'Serial': %i," \
             " 'IP': %s, 'Port': %i)" \
-            % (self._meta_device, self._meta_connection, self._meta_serial_number,
-               self._meta_ip_addr, self._meta_port)
+            % (self._meta_device, self._meta_connection,
+               self._meta_serial_number, self._meta_ip_addr, self._meta_port)
 
     @property
     def connection_status(self):
@@ -931,7 +931,7 @@ class LabjackReader(object):
             pass
 
     def _setup(self, inputs, inputs_max_voltages, resolution,
-               scan_rate, scans_per_read=-1) -> Tuple[int, int]:
+               frequency, scans_per_read=-1) -> Tuple[int, int]:
         """
         Set up a connection to the LabJack for streaming
 
@@ -945,7 +945,7 @@ class LabjackReader(object):
             listed in inputs.
         resolution: int, optional
             See official LabJack documentation.
-        scan_rate: int
+        frequency: int
             Number of times per second (Hz) the device will get a datapoint for
             each of the channels specified.
         scans_per_read: int, optional
@@ -954,37 +954,37 @@ class LabjackReader(object):
 
         Returns
         -------
-        scan_rate : int
+        frequency : int
             The actual scan rate the device starts at
         scans_per_read : int
             The actual sample rate the device starts at
 
         """
         # Sanity check on inputs
-        max_scan_rate = int(calculate_max_speed(self.device_type, len(inputs),
+        max_frequency = int(calculate_max_speed(self.device_type, len(inputs),
                                                 int(max(inputs_max_voltages)),
                                                 resolution))
-        if max_scan_rate < 0:
+        if max_frequency < 0:
             warnings.warn("Maximum valid scan rate is not known for this"
                           " configuration or device. Proceed at your own"
                           " risk.", RuntimeWarning)
-        max_scan_rate = int(max_scan_rate / 2)
+        max_frequency = int(max_frequency / 2)
 
-        # Verify scan_rate first.
-        if scan_rate > max_scan_rate:
+        # Verify frequency first.
+        if frequency > max_frequency:
             warnings.warn("Maximum valid scan rate is less than the value"
                           " provided. Setting to highest valid value.",
                           UserWarning)
-            scan_rate = max_scan_rate
+            frequency = max_frequency
 
         # Next, verify the scans/read.
         if scans_per_read == -1:
-            scans_per_read = int(scan_rate / 2)
-        elif scans_per_read > scan_rate:
+            scans_per_read = int(frequency / 2)
+        elif scans_per_read > frequency:
             warnings.warn("Maximum valid scan/read rate is larger than"
                           " the scan rate. Setting to be equal to the scan"
                           " rate.", UserWarning)
-            scans_per_read = int(scan_rate / 2)
+            scans_per_read = int(frequency / 2)
 
         # If a packet is lost, don't try and get it again.
         self._ljm_reference.modify_settings(retry_on_transaction_err=False)
@@ -1017,8 +1017,9 @@ class LabjackReader(object):
         ljm.eWriteNames(self._handle, num_frames, names, values)
 
         # Configure and start stream
-        return self._ljm_reference.stream_start(self._handle, inputs, scan_rate,
-                                          scans_per_read), scans_per_read
+        return (self._ljm_reference.stream_start(self._handle, inputs,
+                                                 frequency, scans_per_read),
+                scans_per_read)
 
     def open(self, verbose=True) -> None:
         """
@@ -1264,7 +1265,7 @@ class LabjackReader(object):
 
         Returns
         -------
-        scan_rate : int
+        frequency : int
             Number of times per second (Hz) the device will get a data point
             for each of the channels specified.
         scans_per_read : int, optional
@@ -1320,7 +1321,7 @@ class LabjackReader(object):
                 try:
                     # Open a connection.
                     self.open(verbose=False)
-                    scan_rate, sample_rate = self._setup(inputs,
+                    frequency, sample_rate = self._setup(inputs,
                                                          inputs_max_voltages,
                                                          resolution,
                                                          med_rate,
@@ -1464,7 +1465,7 @@ class LabjackReader(object):
                      inputs: List[str],
                      inputs_max_voltages: List[float],
                      seconds: float,
-                     scan_rate: int,
+                     frequency: int,
                      scans_per_read=-1,
                      resolution=4,
                      verbose=False,
@@ -1488,7 +1489,7 @@ class LabjackReader(object):
             Duration of the data run in seconds. The run will last at least as
             long as this value, and will try to stop streaming when this time
             has been met.
-        scan_rate : int
+        frequency : int
             Number of times per second (Hz) the device will get a data point
             for each of the channels specified.
         scans_per_read : int, optional
@@ -1498,6 +1499,15 @@ class LabjackReader(object):
             See official LabJack documentation.
         verbose : str, optional
             If enabled, will print out statistics about each read.
+        callback_function : optional
+            A callable object that takes the single parameter "row" as an
+            argument. This argument represents one row of data collected from
+            the labjack, and as such has the same format as data outputted
+            from the method to_array.
+        num_threads : optional
+            Only taken into consideration when callback_function is not None.
+            The number of threads in a pool used to call the callback function.
+            As long as your system can handle it, more is better.
 
         Returns
         -------
@@ -1505,6 +1515,13 @@ class LabjackReader(object):
             The total amount of time actually spent collecting data
         num_skips : float
             The number of skipped data points.
+
+        Notes
+        -----
+        `callback_function` gets passed to a `multiprocessing` thread pool.
+        At this time, this means it must be pickleable and not have local
+        scope. Future versions of this library may be able to work around
+        this limitation.
 
         Examples
         --------
@@ -1544,9 +1561,9 @@ class LabjackReader(object):
         if seconds <= 0:
             raise ValueError("Invalid duration for data collection.")
 
-        # Input validation for scan_rate
-        if scan_rate <= 0:
-            raise ValueError("Invalid frequency provided for scan_rate.")
+        # Input validation for frequency
+        if frequency <= 0:
+            raise ValueError("Invalid frequency provided for frequency.")
 
         # Open a connection.
         self.open(verbose=verbose)
@@ -1560,12 +1577,12 @@ class LabjackReader(object):
 
         # Create a RawArray for multiple processes; this array
         # stores our data.
-        size = int(seconds * scan_rate * (len(inputs) + 2))
+        size = int(seconds * frequency * (len(inputs) + 2))
 
 
-        scan_rate, scans_per_read = self._setup(inputs, inputs_max_voltages,
+        frequency, scans_per_read = self._setup(inputs, inputs_max_voltages,
                                                 resolution,
-                                                scan_rate,
+                                                frequency,
                                                 scans_per_read=scans_per_read)
 
         if verbose:
@@ -1593,21 +1610,22 @@ class LabjackReader(object):
 
                 if verbose:
                     print("[%26s] %15d / %15d %4.1d%% %15d %15d"
-                        % (datetime.datetime.now(), self.max_index, size,
-                            ((float(self.max_index) / float(size)) * 100
-                            if self.max_index else 0), ret[1], ret[2]))
+                          % (datetime.datetime.now(), self.max_index, size,
+                             ((float(self.max_index) / float(size)) * 100
+                             if self.max_index else 0), ret[1], ret[2]))
 
                 for i in range(0, len(curr_data), step_size):
                     # Ensure that this packet won't overflow our buffer.
                     if self._max_index >= size:
                         break
 
-                    # We will manually calculate the times each entry occurs at.
+                    # We will manually calculate the times each entry occurs
+                    # at.
                     # The stream itself is timed by the same clock that runs
-                    # CORE_TIMER, and it is officially advised we use the stream
-                    # clocking instead.
+                    # CORE_TIMER, and it is officially advised we use the
+                    # stream clocking instead.
                     # See https://forums.labjack.com/index.php?showtopic=6992
-                    curr_time = (scans_per_read / scan_rate) * (packet_num + (i / len(curr_data)))
+                    curr_time = (scans_per_read / frequency) * (packet_num + (i / len(curr_data)))
 
                     # We get a giant 1D list back, so work with what we have.
                     self._data_arr[self._max_index: self._max_index + step_size] =\
@@ -1666,7 +1684,7 @@ class LabjackReader(object):
                   "Timed Scan Rate = %f scans/second\n"
                   "Timed Sample Rate = %f samples/second\n"
                   "Skipped scans = %0.0f"
-                  % (self.max_index, total_time, scan_rate,
+                  % (self.max_index, total_time, frequency,
                      (self.max_index / total_time),
                      (self.max_index * num_addrs / total_time),
                      (total_skip / num_addrs)))
