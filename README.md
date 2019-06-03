@@ -1,5 +1,4 @@
 <h1 align="center">labjack-controller</h1>
-<p style="text-align:center"><img src=https://labjack.com/sites/default/files/styles/slideshow/public/T7-Pro_engineering_sshow.jpg?itok=82O0k1DV/></p>
 
 ## An Easy Python Wrapper for LJM to Just Take Data Already
 [![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
