@@ -52,7 +52,7 @@ with LabjackReader("T7") as my_lj:
     my_lj.collect_data(channels, voltages, duration, frequency)
 
     # Get all data recorded as a 2D Numpy array
-    my_data = myLabjack.to_array()
+    my_data = my_lj.to_array()
 ```
 
 ## How To Get Help (or Help Us)
