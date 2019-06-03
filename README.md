@@ -2,8 +2,12 @@
 <p style="text-align:center"><img src=https://labjack.com/sites/default/files/styles/slideshow/public/T7-Pro_engineering_sshow.jpg?itok=82O0k1DV/></p>
 
 ## An Easy Python Wrapper for LJM to Just Take Data Already
+[![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
+[![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
+[![status](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb/status.svg)](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb)
 
 This is a package designed to make streaming data from [LabJack](https://labjack.com/) T-series devices easy.
+
 ## Device Compatibility
 
 + T7 and T7 Pro
@@ -17,8 +21,6 @@ This is a package designed to make streaming data from [LabJack](https://labjack
 All other requirements will be automatically acquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
 
 ## Installation
-[![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
-[![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
 
 You can install this package with `pip` through our `PyPi` package with the command
 ```bash
