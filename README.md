@@ -1,25 +1,26 @@
 <h1 align="center">labjack-controller</h1>
 
-## An Easy Python Wrapper for LJM to Just Take Data Already
 [![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
 [![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
 [![status](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb/status.svg)](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb)
 
+### An Easy Python Wrapper for LJM to Just Take Data Already
+
 This is a package designed to make streaming data from [LabJack](https://labjack.com/) T-series devices easy.
 
-## Device Compatibility
+### Device Compatibility
 
 + T7 and T7 Pro
 + T4
 
-## Requirements
+### Requirements
 
 + Python 3.5+
 + [LJM](https://labjack.com/support/software/installers/ljm)
 
 All other requirements will be automatically acquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
 
-## Installation
+### Installation
 
 You can install this package with `pip` through our `PyPi` package with the command
 ```bash
@@ -34,7 +35,7 @@ cd labjack-controller
 pip install .
 ```
 
-## Sample Usage
+### Sample Usage
 
 Multiple demonstrations of library functions are located in the `demos` folder, and you can [read the library documentation here.](https://labjack-controller.readthedocs.io/en/latest/index.html) However, getting started with full streaming is as easy as
 
@@ -54,17 +55,17 @@ with LabjackReader("T7") as my_lj:
     my_data = my_lj.to_array()
 ```
 
-## How To Get Help (or Help Us)
+### How To Get Help (or Help Us)
 
 If you found a bug, have a question, or otherwise need to contact us, please [read this][0].
 
 If you want to help us in the development process, or have an idea, [read this.][1]
 
-## Contributors
+### Contributors
 
 + [Ben Montgomery](https://github.com/Nyctanthous)
 
-## Special Thanks
+### Special Thanks
 
 + [Paul Nakroshis](https://github.com/paulnakroshis)
 
