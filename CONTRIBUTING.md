@@ -1,5 +1,7 @@
 # So You Want to Be A Contributor
 
+## The USM-Physics Guide for Success In Life
+
 Welcome! Thanks for wanting to contribute. We welcome any improvements for this library.
 To make life easier for you (and to prevent PRs from getting rejected all the time),
 we've outlined some general contributing guidelines for you to follow to ensure all of
