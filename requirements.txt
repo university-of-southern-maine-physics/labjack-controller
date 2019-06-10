@@ -1,0 +1,5 @@
+typing
+numpy
+pandas
+colorama
+labjack-ljm
