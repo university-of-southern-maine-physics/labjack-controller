@@ -3,6 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/labjackcontroller.svg)](https://badge.fury.io/py/labjackcontroller)
 [![Build Status](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller.svg?branch=master)](https://travis-ci.com/university-of-southern-maine-physics/labjack-controller)
 [![Documentation Status](https://readthedocs.org/projects/labjack-controller/badge/?version=latest)](https://labjack-controller.readthedocs.io/en/latest/?badge=latest)
+[![DOI](https://zenodo.org/badge/139457989.svg)](https://zenodo.org/badge/latestdoi/139457989)
 [![status](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb/status.svg)](http://joss.theoj.org/papers/65cc778168eb6bdeff05d852bfe21eeb)
 
 ### An Easy Python Wrapper for LJM to Just Take Data Already
