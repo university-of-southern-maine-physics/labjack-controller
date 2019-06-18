@@ -20,7 +20,7 @@ This is a package designed to make streaming data from [LabJack](https://labjack
 + Python 3.5+
 + [LJM](https://labjack.com/support/software/installers/ljm)
 
-All other requirements will be automatically acquired by `pip`; see `setup.py` for a complete list of all requirements that will be automatically obtained.
+All other requirements will be automatically acquired by `pip`; see `requirements.txt` for a complete list of all requirements that will be automatically obtained.
 
 ### Installation
 
@@ -29,7 +29,7 @@ You can install this package with `pip` through our `PyPi` package with the comm
 pip install labjackcontroller
 ```
 
-Alternatively, you can install from this github repository with
+Alternatively, since we use `pbr` in `setup.py`, you can install from this github repository with
 
 ```bash
 git clone https://github.com/university-of-southern-maine-physics/labjack-controller.git
